@@ -2,11 +2,11 @@ import { visibleWidth } from '@earendil-works/pi-tui'
 import { describe, expect, it } from 'vitest'
 import { createTheme } from '@/theme.ts'
 import { DEFAULT_PALETTE } from '@/theme-defaults.ts'
-import { cacheRate, usageTotals, createStatusFacts } from '@/agent/status.ts'
+import { cacheRate, usageTotals, inputTokenTotal, createStatusFacts } from '@/agent/status.ts'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { formatTokens } from '@/tokens.ts'
-import { formatStatus, shortPath, type StatusFacts } from '@/ui/status.ts'
+import { StatusBar, formatStatus, shortPath, type StatusFacts } from '@/ui/status.ts'
 
 const theme = createTheme('none')
 const FOOTER_HINT = 'Burst'
@@ -31,6 +31,7 @@ const facts = (overrides: Partial<StatusFacts> = {}): StatusFacts => ({
   contextWindow: 128_000,
   cacheRate: 0.87,
   uncachedInputTokens: 1_600,
+  inputTokens: 10_300,
   outputTokens: 3_100,
   cwd: '/Users/dev/source/opensource/deepseek-harness/master',
   home: '/Users/dev',
@@ -139,6 +140,44 @@ describe('cacheRate', () => {
 
   it('ignores counts a backend reported as something other than a number', () => {
     expect(cacheRate({ cacheReadTokens: '87', uncachedInputTokens: 13 })).toBeUndefined()
+  })
+})
+
+describe('persistent footer metrics', () => {
+  it('counts all input buckets without adding output or treating absent data as zero', () => {
+    expect(inputTokenTotal({ uncachedInputTokens: 1600, cacheReadTokens: 8700, cacheWriteTokens: 200, outputTokens: 3100 })).toBe(10500)
+    expect(inputTokenTotal({ uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(0)
+    expect(inputTokenTotal({ uncachedInputTokens: 1600 })).toBeUndefined()
+    expect(inputTokenTotal({ uncachedInputTokens: -1, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBeUndefined()
+    expect(inputTokenTotal(undefined)).toBeUndefined()
+  })
+
+  it('shows the current model, remaining context and cumulative input/output on one bounded row', () => {
+    let current = facts({ model: 'deepseek-flash', effort: 'high', contextTokens: 9000, contextWindow: 10000 })
+    const footer = new StatusBar(() => current, theme)
+    expect(footer.render(80)).toEqual(['deepseek-flash (high) · 上下文剩余 10% · Token 入10.3k / 出3.1k · 缓存87%'])
+    current = { ...current, model: 'deepseek-pro', contextTokens: 12000 }
+    expect(footer.render(80)[0]).toContain('deepseek-pro (high) · 上下文剩余 0%')
+    for (const width of [1, 2, 20, 40, 80]) expect(footer.render(width).every(row => visibleWidth(row) <= width)).toBe(true)
+  })
+
+  it('distinguishes unreported counters from zero usage and rejects an invalid context denominator', () => {
+    const empty = facts({ model: undefined, effort: undefined, contextTokens: undefined, contextWindow: undefined, inputTokens: undefined, outputTokens: undefined, cacheRate: undefined })
+    expect(new StatusBar(() => empty, theme).render(100)[0]).toBe('正在载入模型… · 上下文剩余 — · Token 入— / 出—')
+    expect(new StatusBar(() => facts({ contextTokens: 0, inputTokens: 0, outputTokens: 0 }), theme).render(100)[0]).toContain('上下文剩余 100% · Token 入0 / 出0')
+    expect(new StatusBar(() => facts({ contextWindow: 0 }), theme).render(100)[0]).toContain('上下文剩余 —')
+  })
+
+  it('uses projected occupancy after compaction and reports the meter input buckets', () => {
+    let pressure: Record<string, unknown> = { pressureTokens: 9000, projectedTokens: 3000, contextWindow: 10000 }
+    const ctx = { get: (name: string) => name === 'sessions' ? { get: () => ({}) } : name === 'sessionProjections' ? {
+      stateOf: (_session: unknown, key: string) => key === 'contextPressure' ? pressure : key === 'tokenUsage' ? { totals: { uncachedInputTokens: 1600, cacheReadTokens: 8700, cacheWriteTokens: 200, outputTokens: 3100 } } : undefined,
+    } : undefined } as unknown as Context
+    const read = createStatusFacts(ctx, { sessionId: () => SessionId('metrics'), activity: () => ({ running: false, startedAt: undefined }) })
+    expect(read()).toMatchObject({ contextTokens: 3000, inputTokens: 10500, outputTokens: 3100 })
+    expect(new StatusBar(read, theme).render(100)[0]).toContain('上下文剩余 70%')
+    pressure = { pressureTokens: 9000, contextWindow: 10000 }
+    expect(read().contextTokens).toBe(9000)
   })
 })
 

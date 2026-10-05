@@ -40,7 +40,7 @@ export interface Action {
 }
 
 /** The names the surface's own handler map is keyed by. */
-export type SurfaceActionId = 'toolDetail' | 'subCalls' | 'reasoning' | 'effort' | 'history' | 'back' | 'interrupt' | 'quit'
+export type SurfaceActionId = 'commands' | 'copy' | 'toolDetail' | 'subCalls' | 'reasoning' | 'effort' | 'history' | 'back' | 'cancel' | 'interrupt' | 'quit'
 
 const PROMPT_ACTIONS: readonly Action[] = [
   {
@@ -63,12 +63,15 @@ const PROMPT_ACTIONS: readonly Action[] = [
 
 /** The surface's own actions, each named as the handler map names it. */
 export const SURFACE_ACTIONS: readonly (Action & { readonly name: SurfaceActionId })[] = [
-  { id: 'surface.toolDetail', name: 'toolDetail', layer: 'surface', defaultKeys: ['ctrl+o'], label: 'tool detail', mayUseBare: false, mayUnbind: false },
+  { id: 'surface.commands', name: 'commands', layer: 'surface', defaultKeys: ['ctrl+shift+p'], label: 'command palette', mayUseBare: false, mayUnbind: false },
+  { id: 'surface.copy', name: 'copy', layer: 'surface', defaultKeys: ['ctrl+o'], label: 'copy last answer', mayUseBare: false, mayUnbind: false },
+  { id: 'surface.toolDetail', name: 'toolDetail', layer: 'surface', defaultKeys: ['ctrl+shift+o', 'ctrl+alt+o'], label: 'tool detail', mayUseBare: false, mayUnbind: false },
   { id: 'surface.subCalls', name: 'subCalls', layer: 'surface', defaultKeys: ['ctrl+y'], label: 'nested calls', mayUseBare: false, mayUnbind: false },
   { id: 'surface.reasoning', name: 'reasoning', layer: 'surface', defaultKeys: ['shift+tab'], label: 'reasoning', mayUseBare: false, mayUnbind: false },
   { id: 'surface.effort', name: 'effort', layer: 'surface', defaultKeys: ['ctrl+t'], label: 'reasoning effort', mayUseBare: false, mayUnbind: false },
   { id: 'surface.history', name: 'history', layer: 'surface', defaultKeys: ['ctrl+r'], label: 'search prompt history', mayUseBare: false, mayUnbind: false },
   { id: 'surface.back', name: 'back', layer: 'surface', defaultKeys: ['ctrl+b'], label: 'back to this session', mayUseBare: false, mayUnbind: false },
+  { id: 'surface.cancel', name: 'cancel', layer: 'surface', defaultKeys: ['escape'], label: 'stop active turn', mayUseBare: false, mayUnbind: false },
   { id: 'surface.interrupt', name: 'interrupt', layer: 'surface', defaultKeys: ['ctrl+c'], label: 'cancel', mayUseBare: false, mayUnbind: false },
   { id: 'surface.quit', name: 'quit', layer: 'surface', defaultKeys: ['ctrl+d'], label: 'quit', mayUseBare: false, mayUnbind: false },
 ]
@@ -91,6 +94,7 @@ const CHORD_ACTIONS: readonly Action[] = [
   // a reader asking for it is already at the bar with their hands on the keys.
   { id: 'chord.undo', layer: 'chord', defaultKeys: ['u'], label: 'undo the last prompt', mayUseBare: true, mayUnbind: false },
   { id: 'chord.redo', layer: 'chord', defaultKeys: ['r'], label: 'redo the undone prompt', mayUseBare: true, mayUnbind: false },
+  { id: 'chord.commands', layer: 'chord', defaultKeys: ['k'], label: 'commands', mayUseBare: true, mayUnbind: false },
 ]
 
 const GATE_ACTIONS: readonly Action[] = [

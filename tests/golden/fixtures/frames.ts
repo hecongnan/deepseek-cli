@@ -49,6 +49,7 @@ const STATUS_FACTS: StatusFacts = {
   contextWindow: 1_000_000,
   cacheRate: 0.87,
   uncachedInputTokens: 2_300,
+  inputTokens: 17_700,
   outputTokens: 3_100,
   cwd: '/Users/dev/source/opensource/deepseek-harness/master',
   home: '/Users/dev',

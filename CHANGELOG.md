@@ -8,6 +8,56 @@ breaking change, and a patch carries only fixes.
 
 ## [Unreleased]
 
+### GitHub source distribution
+
+- Add portable installation documentation and an offline preview fixture with a shipped preference example.
+- Honor DSH_HOME when launching the CLI wrapper and run wrapper tests in CI.
+- Keep upstream MIT attribution, prevent npm publication of this derivative and omit machine-specific deployment/runtime state.
+
+
+### Local footer metrics (1.2.1-local)
+
+- Keep the current model, remaining context percentage, session input/output tokens and reported cache hit rate directly below the input, above selection lists.
+- Count cached input buckets in session input totals and follow projected context occupancy after messages and compaction; show unreported values as unknown.
+- Keep work, chord and parked-draft feedback on a separate row, without repeating idle help on every frame.
+
+### Local reference layout (1.2.0-local)
+
+- Keep the whale introduction above the conversation, emphasize questions with a blue `>` and draw answers as plain text.
+- Place model, reasoning effort, command, history and other selection lists below the ruled input; retain the draft while lists own the keyboard.
+- Show one recessive reasoning preview when folded, preserve click expansion below the welcome header, and place completion suggestions below input.
+- Preserve a usable prompt during tiny-terminal resizing and translate pointer input through rules and lower completion lists.
+
+### Local Codex alignment
+
+- Add exec/e, resume --last/--all, --cd, initial-task launch and a DeepSeek review entry.
+- Add permissions picker, keymap/ps/agent aliases, review/init tasks, and fresh-session /clear semantics.
+- Align copy to Ctrl+O, stop to Escape and idle exit to Ctrl+C; release Kitty launcher shortcuts and keep an expansion fallback.
+- Draw compact role markers and command/output blocks, show real Git patches, localize command completions, and keep the searchable command palette to eight candidates.
+
+
+### Changed
+
+- Local edition: reduce the welcome to a compact whale, greeting, model, and directory; keep input immediately below short conversations and move passive diagnostics to `/status`.
+- Local edition: replace the permanent two-row status with a quiet hint and show work, draft, and context-pressure feedback only when relevant; omit automatic session-ID notices.
+
+
+### Added
+
+- Local DeepSeek CLI edition: official whale terminal mark, responsive welcome,
+  searchable command palette, grouped/filterable help, and draft-safe command staging.
+- Read-only local diagnostics, configuration locations and Git change summaries.
+- Wrapper entry points for default TUI, project-scoped continue, title/ID resume,
+  durable session metadata listings, cwd selection and headless text/JSONL tasks.
+
+### Changed
+
+- Put context, cache and working directory on a separate footer row.
+
+### Fixed
+
+- Validate a mutable clone of frozen Config-backed nested appearance settings.
+
 ## [0.13.0] - 2026-10-01
 
 ### Fixed

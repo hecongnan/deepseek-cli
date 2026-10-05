@@ -310,19 +310,20 @@ exports[`golden frames > renders the stash picker at 80 columns 1`] = `
 
 exports[`golden frames > renders the status row at 40 columns 1`] = `
 [
-  "● ready · standard · zai-coding-cn/glm-…",
+  "glm-5.3 (max) · 上下文剩余 98% · Token …",
 ]
 `;
 
 exports[`golden frames > renders the status row at 80 columns 1`] = `
 [
-  "● ready · standard · zai-coding-cn/glm-5.3 (max) · workspace-write · ctx 17.5k/…",
+  "glm-5.3 (max) · 上下文剩余 98% · Token 入17.7k / 出3.1k · 缓存87%",
 ]
 `;
 
 exports[`golden frames > renders the status row with parked drafts at 80 columns 1`] = `
 [
-  "● ready · standard · zai-coding-cn/glm-5.3 (max) · workspace-write · stash 3 · …",
+  "glm-5.3 (max) · 上下文剩余 98% · Token 入17.7k / 出3.1k · 缓存87%",
+  "草稿 3",
 ]
 `;
 

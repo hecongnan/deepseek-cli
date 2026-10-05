@@ -35,6 +35,14 @@ export function usageTotals(state: unknown): Record<string, unknown> | undefined
   return asRecord(asRecord(state)?.totals)
 }
 
+/** The meter keeps cache buckets separate; omitting them understates session input. */
+export function inputTokenTotal(usage: Record<string, unknown> | undefined): number | undefined {
+  const counts = [usage?.uncachedInputTokens, usage?.cacheReadTokens, usage?.cacheWriteTokens]
+  if (!counts.every((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0)) return undefined
+  const total = counts.reduce((sum, value) => sum + value, 0)
+  return Number.isFinite(total) ? total : undefined
+}
+
 /**
  * Share of prompt tokens a provider served from cache.
  *
@@ -124,10 +132,12 @@ export function createStatusFacts(ctx: Context, sources: StatusSources): () => S
         ? sources.routeHints?.({ provider: selection.provider, model: selection.model }) : undefined,
       agentPreset: session === undefined ? undefined : projectionString(ctx, session, AGENT_PRESET_KEY),
       preset,
-      contextTokens: numberOr(pressure?.pressureTokens),
+      // The projected numerator follows new messages and compaction after the last provider sample.
+      contextTokens: numberOr(pressure?.projectedTokens) ?? numberOr(pressure?.pressureTokens),
       contextWindow: numberOr(pressure?.contextWindow),
       cacheRate: cacheRate(totals),
       uncachedInputTokens: numberOr(totals?.uncachedInputTokens),
+      inputTokens: inputTokenTotal(totals),
       outputTokens: numberOr(totals?.outputTokens),
       stashed: sources.stash?.(),
       cwd: process.cwd(),

@@ -230,7 +230,7 @@ describe('the keys section', () => {
     const settings = parseSettings({ keys: { 'surface.effort': 'ctrl+e', 'prompt.submit': ['ctrl+g'] } })
     expect(keysFor(settings.keymap, 'surface.effort')).toEqual(['ctrl+e'])
     expect(keysFor(settings.keymap, 'prompt.submit')).toEqual(['ctrl+g'])
-    expect(keysFor(settings.keymap, 'surface.toolDetail')).toEqual(['ctrl+o'])
+    expect(keysFor(settings.keymap, 'surface.toolDetail')).toEqual(['ctrl+shift+o', 'ctrl+alt+o'])
     expect([...settings.keymap.written].sort()).toEqual(['prompt.submit', 'surface.effort'])
   })
 
@@ -268,7 +268,7 @@ describe('the keys section', () => {
   })
 
   it('rejects two actions of one layer claiming one key', () => {
-    expect(() => parseSettings({ keys: { 'surface.effort': 'ctrl+o' } })).toThrow(/surface\.toolDetail/)
+    expect(() => parseSettings({ keys: { 'surface.effort': 'ctrl+o' } })).toThrow(/surface\.copy/)
   })
 
   it('falls back to the shipped map when the reader wrote one the surface refuses', () => {

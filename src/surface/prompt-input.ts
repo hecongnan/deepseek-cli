@@ -140,6 +140,8 @@ export function createPromptInput(ctx: Context, ports: PromptInputPorts): Prompt
    * without a handler here fails to compile rather than doing nothing.
    */
   const surfaceActions: Readonly<Record<SurfaceActionId, () => boolean>> = {
+    commands: () => { ports.runSubmission({ kind: 'commands' }); return true },
+    copy: () => { ports.runSubmission({ kind: 'copy' }); return true },
     toolDetail: () => {
       ports.toggleCards()
       ports.tui().requestRender()
@@ -165,6 +167,16 @@ export function createPromptInput(ctx: Context, ports: PromptInputPorts): Prompt
     },
     back: () => {
       ports.back()
+      return true
+    },
+    cancel: () => {
+      if (!ports.turnRunning()) return false
+      const queued = ports.queuedPrompts()
+      const draft = ports.editor().getExpandedText()
+      ports.interrupt()
+      if (queued.length > 0) ports.editor().setText([...queued, ...(draft === '' ? [] : [draft])].join('\n'))
+      ports.notice('interrupt requested')
+      ports.tui().requestRender()
       return true
     },
     interrupt: () => {
@@ -201,7 +213,8 @@ export function createPromptInput(ctx: Context, ports: PromptInputPorts): Prompt
           ports.back()
           return true
         case 'hand-back':
-          return false
+          ports.requestExit(0)
+          return true
       }
     },
     quit: () => {

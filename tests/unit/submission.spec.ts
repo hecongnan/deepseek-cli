@@ -10,7 +10,8 @@ describe('classifySubmission', () => {
   it('recognizes the surface-local commands', () => {
     expect(classifySubmission('/quit')).toEqual({ kind: 'quit' })
     expect(classifySubmission('/exit')).toEqual({ kind: 'quit' })
-    expect(classifySubmission('/clear')).toEqual({ kind: 'clear' })
+    expect(classifySubmission('/clear')).toEqual({ kind: 'new', title: '' })
+    expect(classifySubmission('/screen-clear')).toEqual({ kind: 'clear' })
     expect(classifySubmission('/help')).toEqual({ kind: 'help' })
     expect(classifySubmission('/resume')).toEqual({ kind: 'resume' })
     expect(classifySubmission('/status')).toEqual({ kind: 'status' })

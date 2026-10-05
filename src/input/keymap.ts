@@ -21,6 +21,7 @@ export const DEFAULT_PREFIX_KEY: KeyId = DEFAULT_PREFIX_KEYS[0]!
  * dispatcher answers both, and a chord cannot drift from its command.
  */
 const CHORD_SUBMISSIONS: Readonly<Record<string, Submission>> = {
+  'chord.commands': { kind: 'commands' },
   'chord.model': { kind: 'model', argument: '' },
   'chord.plan': { kind: 'plan' },
   'chord.copy': { kind: 'copy' },

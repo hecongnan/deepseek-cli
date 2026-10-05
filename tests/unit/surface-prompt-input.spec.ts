@@ -305,7 +305,7 @@ describe("the bar's own presses", () => {
   })
 
   it.each([
-    ['ctrl+o', CTRL_O, 'toggleCards', 1],
+    ['ctrl+shift+o', '\x1b[111;6u', 'toggleCards', 1],
     ['ctrl+y', CTRL_Y, 'toggleSubCalls', 1],
     ['shift+tab', SHIFT_TAB, 'toggleReasoning', 1],
     // A menu that opens paints itself, so the press must not repaint the frame
@@ -322,6 +322,24 @@ describe("the bar's own presses", () => {
 })
 
 describe('the cancel key', () => {
+  it('copies with Ctrl+O and leaves expansion on Ctrl+Shift+O', () => {
+    const h = fixture()
+    expect(h.press(CTRL_O)).toEqual({ consume: true })
+    expect(h.rec.runs).toEqual([{ kind: 'copy' }])
+    expect(h.rec.trace).toEqual([])
+  })
+  it('stops active work with Esc while preserving queued prompts and the draft', () => {
+    const h = fixture()
+    h.editor.text = 'draft'
+    expect(h.press('\x1b')).toBeUndefined()
+    expect(h.rec.exits).toEqual([])
+    h.state.turnRunning = true
+    h.state.queued = ['next']
+    expect(h.press('\x1b')).toEqual({ consume: true })
+    expect(h.editor.text).toBe('next\ndraft')
+    expect(h.rec.trace).toEqual(['interrupt'])
+    expect(h.rec.exits).toEqual([])
+  })
   it('empties the bar before it reaches for the agent', () => {
     const h = fixture()
     h.editor.text = 'half-written'
@@ -367,9 +385,10 @@ describe('the cancel key', () => {
     expect(h.rec.notices).toEqual([])
   })
 
-  it('hands back a cancel press with nothing left to take', () => {
+  it('exits on Ctrl+C with an idle empty composer', () => {
     const h = fixture()
-    expect(h.press(CTRL_C)).toBeUndefined()
+    expect(h.press(CTRL_C)).toEqual({ consume: true })
+    expect(h.rec.exits).toEqual([0])
     expect(h.rec.trace).toEqual([])
     expect(h.rec.notices).toEqual([])
   })

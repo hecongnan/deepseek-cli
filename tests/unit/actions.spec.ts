@@ -8,7 +8,9 @@ import { normalizeKey } from '@/input/key-press.ts'
 const SHIPPED: Readonly<Record<string, readonly string[]>> = {
   'prompt.submit': ['ctrl+enter', 'alt+enter', 'ctrl+s'],
   'prompt.newLine': ['enter', 'shift+enter', 'ctrl+j'],
-  'surface.toolDetail': ['ctrl+o'],
+  'surface.copy': ['ctrl+o'],
+  'surface.cancel': ['escape'],
+  'surface.toolDetail': ['ctrl+shift+o', 'ctrl+alt+o'],
   'surface.subCalls': ['ctrl+y'],
   'surface.reasoning': ['shift+tab'],
   'surface.effort': ['ctrl+t'],
@@ -151,7 +153,7 @@ describe('resolveKeymap', () => {
   it('merges the actions the reader did write and leaves the rest alone', () => {
     const map = resolveKeymap({ 'surface.effort': 'ctrl+e' })
     expect(keysFor(map, 'surface.effort')).toEqual(['ctrl+e'])
-    expect(keysFor(map, 'surface.toolDetail')).toEqual(['ctrl+o'])
+    expect(keysFor(map, 'surface.toolDetail')).toEqual(['ctrl+shift+o', 'ctrl+alt+o'])
     expect([...map.written]).toEqual(['surface.effort'])
   })
 
@@ -216,7 +218,7 @@ describe('resolveKeymap', () => {
   })
 
   it('refuses two actions of one layer claiming one key', () => {
-    expect(() => resolveKeymap({ 'surface.effort': 'ctrl+o' })).toThrow(/surface.toolDetail/)
+    expect(() => resolveKeymap({ 'surface.effort': 'ctrl+o' })).toThrow(/surface.copy/)
     expect(() => resolveKeymap({ 'gate.reject': 'y' })).toThrow(/gate.allow/)
     expect(() => resolveKeymap({ 'prompt.submit': ['ctrl+g'], 'prompt.newLine': ['ctrl+g'] })).toThrow(/prompt\.submit/)
   })

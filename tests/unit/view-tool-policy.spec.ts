@@ -63,7 +63,7 @@ describe('TranscriptView tool display policy', () => {
       const view = viewOf(shell(25), COLLAPSED, undefined, toolDisplayTable({ bash: { output: 'tail', tail: 2 } }))
       const lines = view.render(60)
       expect(lines.filter(line => line.startsWith('    row '))).toEqual(['    row 23', '    row 24'])
-      expect(lines.at(-1)).toBe('    … 23 earlier lines · ctrl+o shows more')
+      expect(lines.at(-1)).toBe('    … 23 earlier lines · ctrl+shift+o shows more')
       // A tail at least as wide as the output draws no hint: nothing was dropped.
       const whole = viewOf(shell(3), COLLAPSED, undefined, toolDisplayTable({ bash: { output: 'tail', tail: 3 } }))
       expect(whole.render(60)).toEqual(['bash Run echo rows · exit 0', '    row 0', '    row 1', '    row 2'])
@@ -80,7 +80,7 @@ describe('TranscriptView tool display policy', () => {
         'bash Run echo rows · exit 0 · 1 line',
         '    row 1',
         '    row 2',
-        '    … 1 earlier lines · ctrl+o shows more',
+        '    … 1 earlier lines · ctrl+shift+o shows more',
       ])
     })
   it('toggles one clicked message and leaves its neighbour alone', () => {

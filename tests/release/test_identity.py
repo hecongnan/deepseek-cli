@@ -40,9 +40,9 @@ class ReleaseIdentityTests(unittest.TestCase):
     def test_package_name_matches_the_manifest(self):
         self.assertEqual(self.settings["PKG_NAME"], self.manifest["name"])
 
-    def test_the_package_is_publishable(self):
-        self.assertIsNot(self.manifest.get("private"), True)
-        self.assertEqual(self.manifest["publishConfig"]["access"], "public")
+    def test_source_derivative_cannot_publish_as_upstream(self):
+        self.assertIs(self.manifest.get("private"), True)
+        self.assertFalse((WORKFLOW_DIR / "release.yml").exists())
 
     def test_repository_and_registry_match_the_manifest(self):
         repository = self.manifest["repository"]
@@ -50,11 +50,12 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertIn(self.settings["REPO"], url)
         self.assertEqual(self.manifest["publishConfig"]["registry"], self.settings["REGISTRY"])
 
-    def test_release_workflow_carries_the_declared_gates(self):
-        self.assertIn("environment: " + self.settings["ENVIRONMENT"], self.workflow)
-        self.assertIn("id-token: write", self.workflow)
-        self.assertIn("tags: ['" + self.settings["TAG_PATTERN"] + "']", self.workflow)
-        self.assertIn("npm publish --provenance --access public", self.workflow)
+    def test_source_workflow_carries_verification_without_publication(self):
+        for gate in ("pnpm typecheck", "pnpm test", "node --test cli/cli.test.mjs", "node tools/pack-smoke.mjs"):
+            self.assertIn(gate, self.workflow)
+        workflows = "\n".join(path.read_text() for path in WORKFLOW_DIR.glob("*.yml"))
+        self.assertNotIn("id-token: write", workflows)
+        self.assertNotIn("npm publish", workflows)
 
     def test_the_bundle_patch_row_names_this_package(self):
         patch = (ROOT / "cordis.patch.yml").read_text()

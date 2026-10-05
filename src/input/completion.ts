@@ -28,7 +28,8 @@ export function commandMenu(registered: readonly RegisteredCommand[]): SlashComm
     name: name.slice(1),
     description: LOCAL_COMMAND_DESCRIPTIONS[name] ?? '',
   }))
-  return [...local, ...registered.map(command => ({ name: command.name, description: command.description }))]
+  const names = new Set(local.map(command => command.name))
+  return [...local, ...registered.filter(command => !names.has(command.name)).map(command => ({ name: command.name, description: command.description }))]
 }
 
 /**

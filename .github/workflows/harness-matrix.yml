@@ -4,8 +4,6 @@ name: harness-matrix
 # harness release that moves past dsh.compatibility.dshReleases fails here on
 # schedule, so the bump RELEASE.md owns happens before a release needs it.
 on:
-  schedule:
-    - cron: '17 6 * * *'
   workflow_dispatch:
 
 permissions:

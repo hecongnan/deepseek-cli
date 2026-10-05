@@ -71,6 +71,8 @@ export interface ModalInputPorts {
   /** Rebuild the prompt's own menu once a borrowed bar is given back. */
   readonly refreshCompletion: () => void
   readonly activeSession: () => SessionId
+  /** The local surface puts every command picker in its dedicated input region. */
+  readonly belowPromptPickers?: boolean
 }
 
 /** The reads, operations and request listeners the composing surface routes here. */
@@ -164,7 +166,7 @@ export function createModalInput(ctx: Context, ports: ModalInputPorts): ModalInp
   ): Promise<string | undefined> => {
     if (occupied()) return Promise.resolve(undefined)
     return new Promise<string | undefined>(resolve => {
-      const overlay = placement === 'popup'
+      const overlay = placement === 'popup' && ports.belowPromptPickers !== true
         ? ports.tui.showOverlay(
             new PickerPopup(rows => picker.card(rows), () => ports.terminal.rows, ports.theme),
             {
@@ -184,7 +186,7 @@ export function createModalInput(ctx: Context, ports: ModalInputPorts): ModalInp
         vetting: false,
         settle: resolve,
         vet,
-        card: overlay === undefined ? () => picker.card() : undefined,
+        card: overlay === undefined ? () => picker.card(ports.belowPromptPickers ? Math.max(1, Math.min(8, Math.floor(ports.terminal.rows / 2) - 7)) : undefined) : undefined,
         release: overlay === undefined ? undefined : () => overlay.hide(),
       }
       // A picker is not reported as a wait, though it owns the keyboard exactly

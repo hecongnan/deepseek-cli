@@ -50,6 +50,16 @@ describe('the surface root layout', () => {
     },
   )
 
+  it('keeps input beside a short conversation and puts spare rows below it', () => {
+    const { prompt } = promptOf('the draft')
+    const transcript = rowsOf('welcome', 5)
+    const root = surfaceLayout({ transcript, dock: rowsOf('dock', 0), queue: rowsOf('queue', 0), prompt, status: rowsOf('status', 1) })
+    const frame = renderLayoutFrame(root, 80, 40, () => {})
+    expect(frame.lines.findIndex(line => line.includes('the draft'))).toBe(6)
+    expect(frame.lines.findIndex(line => line.includes('status'))).toBe(8)
+    expect(frame.lines.filter(line => line.includes('welcome'))).toHaveLength(5)
+  })
+
   it('does not add an editor measurement beyond the prompt layout and placement', () => {
     const { prompt, editor } = promptOf('the draft')
     const render = vi.spyOn(editor, 'render')

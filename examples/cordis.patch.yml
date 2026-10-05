@@ -1,0 +1,37 @@
+# Local TUI preferences. Keep the launch mappings: config overrides replace the row.
+- id: tui
+  config:
+    sessionId: !!js ctx.tuiStartup.sessionId
+    resume: !!js ctx.tuiStartup.resume
+    resumePicker: !!js ctx.tuiStartup.resumePicker
+    initialPrompt: !!js ctx.tuiStartup.initialPrompt
+    model: !!js ctx.tuiStartup.model
+    provider: !!js ctx.tuiStartup.provider
+    preset: !!js ctx.tuiStartup.preset
+    color: !!js ctx.tuiStartup.color
+    bell: !!js ctx.tuiStartup.bell
+    theme: deepseek-blue
+    mermaid: final
+    subcalls: collapsed
+    spacing:
+      padding: 1
+      messages: 1
+      steps: 0
+    tools:
+      default: { collapsed: true, output: hidden }
+      bash: { output: tail, tail: 6 }
+    keys:
+      prompt.submit: [enter, ctrl+enter, alt+enter, ctrl+s]
+      prompt.newLine: [shift+enter]
+    palette:
+      muted: '#b8c2d1'
+      faint: '#929fb1'
+    tokens:
+      picker.rowCurrent: { fg: accent, bold: true }
+      transcript.user: { fg: accent, bold: true }
+      transcript.assistant.border: { fg: '#65758b' }
+      transcript.user.border: { fg: accent }
+      editor.border: { fg: accent }
+      tool.title: { fg: accent, bold: true }
+      tool.failed.title: { fg: removed, bold: true }
+      tool.running.title: { fg: warn, bold: true }

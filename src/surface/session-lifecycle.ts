@@ -254,7 +254,7 @@ export function createSessionLifecycle(ctx: Context, ports: SessionLifecyclePort
       void handle.dispose()
     })
     ports.installCompletion()
-    ports.notice(`session ${handle.sessionId}${resume ? ' (resumed)' : ''}`)
+    // Session identity remains available through /status and the exit resume hint.
     ports.render()
     // Returned so a caller that replaced the handle can send through the new
     // one without a fresh read of state TypeScript can no longer widen.

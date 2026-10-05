@@ -6,6 +6,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
  * and on a usage error, which is how dependent rows stay unmounted.
  */
 export interface TuiStartup {
+  /** Optional first task explicitly supplied by the user at launch. */
+  readonly initialPrompt?: string | undefined
   /** Exact session this run owns: a fresh id or the one being resumed. */
   readonly sessionId: SessionId
   /** Rehydrate persisted history instead of creating the session fresh. */

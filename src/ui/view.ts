@@ -1,3 +1,5 @@
+import { welcomeRows } from './welcome.ts'
+import type { StatusFacts } from './status.ts'
 import { TranscriptDocument } from './view/document.ts'
 import { type PickerCard } from './picker.ts'
 import { pickerCardLines } from './picker-card.ts'
@@ -11,7 +13,7 @@ import { DEFAULT_SPACING, type Spacing } from '../spacing.ts'
 import { SECOND_MS } from '../transcript/tool-calls.ts'
 import { type TranscriptEntry, type TranscriptModel } from '../transcript.ts'
 import { type GateCard } from '../gates.ts'
-import { defaultKeymap, hintKeys, type Keymap } from '../input/actions.ts'
+import { defaultKeymap, hintKeys, keysFor, type Keymap } from '../input/actions.ts'
 import { type Component, type TuiMouseEvent, type TuiMouseEventResult, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui'
 import { GateCards } from './view/gate-card.ts'
 import { Messages } from './view/transcript-message.ts'
@@ -76,6 +78,9 @@ const nestedCallsClickKey = (id: string): string | undefined => (id === '' ? und
  */
 /** What sits below the transcript while the reader is being asked something. */
 export interface TranscriptViewOptions {
+  /** Compact local presentation inspired by Codex. */
+  readonly presentation?: 'codex'
+  readonly welcome?: () => StatusFacts
   readonly state?: () => ViewState
   readonly gate?: () => GateCard | undefined
   readonly picker?: () => PickerCard | undefined
@@ -107,6 +112,10 @@ export class TranscriptView implements Component {
   private readonly document: TranscriptDocument
   private readonly clicked = new Map<string, boolean>()
   private presentationRevision = 0
+  private welcomeRevision = -1
+  private welcomeVisible = false
+  private headerRows = 0
+  private headerCopy: FrameRow[] = []
   private readonly cards: ToolCards
   private readonly messages: Messages
   private readonly gates: GateCards
@@ -118,8 +127,8 @@ export class TranscriptView implements Component {
     private readonly markdown: MarkdownRenderer,
     private readonly options: TranscriptViewOptions = {},
   ) {
-    this.cards = new ToolCards({ theme: this.theme, keymap: () => this.keymap(), toolDisplay: tool => this.toolDisplay(tool), expansionOf: entry => this.expansionOf(entry), subCallsOpen: entry => this.subCallsOpen(entry), liveCall: callId => this.model.liveCall(callId), cardOpenHint: () => hintKeys(this.keymap(), 'surface.toolDetail') || CARD_OPEN_FALLBACK, toolKey: id => toolClickKey(id), subCallsKey: id => nestedCallsClickKey(id), subCallKey: (parentId, id) => subCallClickKey(parentId, id), subCallOpen: (parentId, id) => this.subCallOpen(parentId, id) })
-    this.messages = new Messages({ theme: this.theme, markdown: this.markdown, reasoningOpen: entry => this.reasoningOpen(entry), reasoningFoldHint: () => this.reasoningFoldHint(), reasoningKey: id => reasoningClickKey(id), spacing: () => this.air(), pushWrapped: (lines, text, width, prefix, token) => this.pushWrapped(lines, text, width, prefix, token) })
+    this.cards = new ToolCards({ codex: options.presentation === 'codex', theme: this.theme, keymap: () => this.keymap(), toolDisplay: tool => this.toolDisplay(tool), expansionOf: entry => this.expansionOf(entry), subCallsOpen: entry => this.subCallsOpen(entry), liveCall: callId => this.model.liveCall(callId), cardOpenHint: () => keysFor(this.keymap(), 'surface.toolDetail')[0] ?? CARD_OPEN_FALLBACK, toolKey: id => toolClickKey(id), subCallsKey: id => nestedCallsClickKey(id), subCallKey: (parentId, id) => subCallClickKey(parentId, id), subCallOpen: (parentId, id) => this.subCallOpen(parentId, id) })
+    this.messages = new Messages({ codex: options.presentation === 'codex', theme: this.theme, markdown: this.markdown, reasoningOpen: entry => this.reasoningOpen(entry), reasoningFoldHint: () => this.reasoningFoldHint(), reasoningKey: id => reasoningClickKey(id), spacing: () => this.air(), pushWrapped: (lines, text, width, prefix, token) => this.pushWrapped(lines, text, width, prefix, token) })
     this.gates = new GateCards({ theme: this.theme, pushWrapped: (lines, text, width, prefix, token) => this.pushWrapped(lines, text, width, prefix, token) })
     this.document = new TranscriptDocument({
       model,
@@ -192,9 +201,10 @@ export class TranscriptView implements Component {
    */
   handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
     if (event.type !== 'click' || event.button !== 'left') return undefined
+    const row = event.y - this.headerRows
     let span: ClickSpan | undefined
     for (const candidate of this.document.spans) {
-      if (event.y < candidate.start || event.y >= candidate.end) continue
+      if (row < candidate.start || row >= candidate.end) continue
       if (span === undefined || candidate.end - candidate.start < span.end - span.start) span = candidate
     }
     if (span === undefined) return undefined
@@ -323,7 +333,25 @@ export class TranscriptView implements Component {
     const keys = this.keymap()
     // Width, folds, theme, spacing, and key hints can change without a transcript event.
     const base = `${width}|${state.expandCards ? 'c' : '-'}${state.expandReasoning ? 'r' : '-'}${state.expandSubCalls ? 'p' : '-'}|${this.theme.revision}|${gaps.messages}:${gaps.steps}|${hintKeys(keys, 'surface.toolDetail')}|${hintKeys(keys, 'surface.reasoning')}`
-    const retained = this.document.render(width, base, this.presentationRevision)
+    const rendered = this.document.render(width, base, this.presentationRevision)
+    const welcome = this.options.welcome?.()
+    if (welcome !== undefined && this.welcomeRevision !== this.model.revision) {
+      this.welcomeRevision = this.model.revision
+      this.welcomeVisible = this.options.presentation === 'codex' || !this.model.entries().some(entry => ['user', 'assistant', 'tool', 'reasoning'].includes(entry.kind))
+    }
+    const empty = welcome !== undefined && this.welcomeVisible
+    const header = empty && welcome !== undefined ? welcomeRows(width, this.theme, welcome, keys) : []
+    this.headerCopy = []
+    if (header.length > 0 && this.options.presentation === 'codex') {
+      header.push('')
+      if (this.model.entries().some(entry => entry.kind === 'user')) {
+        const rule = '─'.repeat(width)
+        header.push(this.theme.style('transcript.assistant.border', rule))
+        this.headerCopy.push({ drawn: rule, frame: { lead: width, trail: 0 } })
+      }
+    }
+    this.headerRows = header.length
+    const retained = header.length > 0 ? [...header, ...rendered] : rendered
     const picker = this.options.picker?.()
     const gate = this.options.gate?.()
     // pi-tui requires string[] but borrows child rows; the native PTY gate protects this pinned boundary.
@@ -343,6 +371,6 @@ export class TranscriptView implements Component {
    * frame back out of a copy without ever touching a character the reader wrote.
    */
   copyRows(): readonly FrameRow[] {
-    return this.document.copyRows()
+    return [...this.headerCopy, ...this.document.copyRows()]
   }
 }
