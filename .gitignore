@@ -158,3 +158,6 @@ __pycache__/
 deployment/
 test-home/
 stage-profile/
+
+# Also ignore dependency directories represented by symlinks.
+/node_modules
