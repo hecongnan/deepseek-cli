@@ -212,7 +212,8 @@ export function parseSettings(raw: unknown): TuiSettings {
   rejectUnknownKeys(raw)
   const section = asRecord(raw)!
   if (section.history !== undefined && asRecord(section.history) === undefined) throw new Error('history must be a mapping')
-  const parsed = SECTION(section) as unknown as {
+  // Config hosts freeze nested preferences; validation needs a mutable copy.
+  const parsed = SECTION(structuredClone(section)) as unknown as {
     theme: string | undefined
     palette: Record<PaletteName, string>
     tokens: Record<string, StyleSpec>

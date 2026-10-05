@@ -151,3 +151,10 @@ vite.config.ts.timestamp-*
 # Python bytecode cache (never commit interpreter output)
 __pycache__/
 *.pyc
+
+# Credentials and local installation state never belong in the public source.
+.credentials.yaml
+.dsh/
+deployment/
+test-home/
+stage-profile/

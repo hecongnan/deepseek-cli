@@ -37,6 +37,7 @@ import { createMermaidTransform } from './ui/mermaid.ts'
 import { QueueBar } from './ui/queue.ts'
 import { StatusBar } from './ui/status.ts'
 import { TranscriptView } from './ui/view.ts'
+import { SelectionPanel } from './ui/selection-panel.ts'
 import type { PromptStash } from './stash.ts'
 
 export const name = 'tui'
@@ -307,9 +308,10 @@ export function apply(ctx: Context, config: unknown): void {
   const { terminal, tui, herdr, disposers, writeTerminal, requestExit, exited } = terminalLifecycle
 
   const view = new TranscriptView(sessionView.model, theme, markdown, {
+    presentation: 'codex',
+    welcome: () => statusFacts(),
     state: appearance.viewState,
     gate: () => modalInput.gateCard(),
-    picker: () => modalInput.pickerCard(),
     keys: appearance.keymap,
     toolDisplay: tool => toolDisplayFor(appearance.toolDisplay(), tool),
     // The gaps the reader tunes in the settings document, read per frame so an
@@ -320,7 +322,7 @@ export function apply(ctx: Context, config: unknown): void {
   // send the library submits on by default. A settings document read after this
   // point installs over it, which is why the bar reads the map per press.
   promptInput.installBindings()
-  const editor = new GateInputBar(tui, theme.editor, appearance.keymap, ghostBrush)
+  const editor = new GateInputBar(tui, theme.editor, appearance.keymap, ghostBrush, text => theme.rich(text, { token: 'status.cwd' }), line => theme.style('transcript.assistant.border', line))
   // Answers are written in the reader's own editor, which is why a question
   // borrows the bar instead of drawing a second one beside it.
   const promptBar = new PromptBar(editor)
@@ -341,6 +343,7 @@ export function apply(ctx: Context, config: unknown): void {
     promptBar,
     refreshCompletion: () => promptInput.applyCompletion(),
     activeSession: () => sessionLifecycle.activeSession(),
+    belowPromptPickers: true,
   })
   disposers.push(sessionView.clearPresentScope)
   /**
@@ -386,7 +389,7 @@ export function apply(ctx: Context, config: unknown): void {
     back: () => (sessionView.viewingChild() ? backHint(appearance.keymap()) : undefined),
     stash: () => stash?.entryCount,
   })
-  const statusBar = new StatusBar(statusFacts, theme)
+  const statusBar = new StatusBar(statusFacts, theme, appearance.keymap)
   const dock = new WorkDock(() => sessionView.workState(), theme, () => backgroundWork.jobs(), () => backgroundWork.roster.list(), undefined, id => {
     void sessionView.show(SessionId(id))
   })
@@ -445,6 +448,8 @@ export function apply(ctx: Context, config: unknown): void {
     dock,
     queue,
     prompt: promptBar,
+    controls: new SelectionPanel(() => modalInput.pickerCard(), theme),
+    promptMinRows: 3,
     status: statusBar,
   }, () => appearance.spacing().padding))
   tui.setFocus(editor)
@@ -461,6 +466,8 @@ export function apply(ctx: Context, config: unknown): void {
    * typed after a session switch answers for the session now on screen.
    */
   const commands = createCommands(ctx, {
+    readDraft: () => editor.getExpandedText(),
+    writeDraft: text => editor.setText(text),
     runPluginAction: pluginActions.run,
     launch: {
       sessionId: resolved.sessionId,
@@ -517,7 +524,11 @@ export function apply(ctx: Context, config: unknown): void {
   appearance.createThemesHome()
   disposers.push(appearance.watchThemes())
 
-  void commands.start().catch((error: unknown) => {
+  void commands.start().then(() => {
+    if (resolved.initialPrompt !== undefined && sessionLifecycle.drivingAgent() !== undefined) {
+      commands.runSubmission({ kind: 'prompt', text: resolved.initialPrompt })
+    }
+  }).catch((error: unknown) => {
     requestExit(1, error instanceof Error ? error.message : String(error))
   })
 }

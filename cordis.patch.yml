@@ -39,6 +39,7 @@
         sessionId: !!js ctx.tuiStartup.sessionId
         resume: !!js ctx.tuiStartup.resume
         resumePicker: !!js ctx.tuiStartup.resumePicker
+        initialPrompt: !!js ctx.tuiStartup.initialPrompt
         model: !!js ctx.tuiStartup.model
         provider: !!js ctx.tuiStartup.provider
         preset: !!js ctx.tuiStartup.preset

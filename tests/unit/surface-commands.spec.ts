@@ -1,3 +1,4 @@
+import { groupedHelp } from '@/ui/command-picker.ts'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -40,9 +41,7 @@ function command(name: string): RegisteredCommand {
  * from those exports rather than copied: a remap must not fail this spec.
  */
 function helpFor(names: readonly string[]): string {
-  const map = defaultKeymap()
-  const commands = names.length === 0 ? 'none registered yet' : names.join(' ')
-  return 'commands: ' + commands + ' · surface: ' + LOCAL_COMMANDS.join(' ') + ' · keys: ' + surfaceKeysLine(map) + ' · ' + chordKeysLine(map)
+  return groupedHelp(names.map(name => command(name.slice(1))))
 }
 
 function facts(overrides: Partial<StatusFacts> = {}): StatusFacts {
@@ -463,7 +462,7 @@ describe('createCommands host commands', () => {
     installRegistry(given, { listed: [command('plan'), command('status')] })
     createCommands(given.ctx, given.ports).runSubmission({ kind: 'command', name: 'nope', line: '/nope' })
 
-    expect(given.notices).toEqual(['unknown command: /nope — ' + helpFor(['/plan', '/status'])])
+    expect(given.notices).toEqual(['unknown command: /nope · /commands 搜索命令，/help 查看指南'])
     expect(given.renders).toBe(1)
   })
 
@@ -482,7 +481,7 @@ describe('createCommands host commands', () => {
     const given = fixture()
     createCommands(given.ctx, given.ports).runSubmission({ kind: 'command', name: 'plan', line: '/plan' })
 
-    expect(given.notices).toEqual(['unknown command: /plan — ' + helpFor([])])
+    expect(given.notices).toEqual(['unknown command: /plan · /commands 搜索命令，/help 查看指南'])
     expect(given.renders).toBe(1)
   })
 
@@ -604,34 +603,35 @@ describe('createCommands status', () => {
         contextTokens: 1000,
         contextWindow: 128000,
         uncachedInputTokens: 1200,
+        inputTokens: 2400,
         outputTokens: 300,
       }),
       false,
-      'session ' + SESSION + ' · viewing ' + VIEWED + ' · model deepseek/chat (high) · mode code · permissions default · context ' + formatTokens(1000) + '/' + formatTokens(128000) + ' · tokens in ' + formatTokens(1200) + ' out ' + formatTokens(300) + ' · cwd /w',
+      'session ' + SESSION + '\nviewing ' + VIEWED + '\nmodel deepseek/chat (high)\nmode code\npermissions default\ncontext ' + formatTokens(1000) + '/' + formatTokens(128000) + '\ntokens in ' + formatTokens(2400) + ' out ' + formatTokens(300) + '\nuncached input ' + formatTokens(1200) + '\ncwd /w',
     ],
     [
       'a child on screen and a route with no provider',
       facts({ model: 'chat' }),
       true,
-      'session ' + SESSION + ' · model chat · cwd /w',
+      'session ' + SESSION + '\nmodel chat\ncwd /w',
     ],
     [
       'a context with no window and only output tokens',
       facts({ contextTokens: 500, outputTokens: 300 }),
       false,
-      'session ' + SESSION + ' · viewing ' + VIEWED + ' · context ' + formatTokens(500) + ' · tokens in ' + formatTokens(0) + ' out ' + formatTokens(300) + ' · cwd /w',
+      'session ' + SESSION + '\nviewing ' + VIEWED + '\ncontext ' + formatTokens(500) + '\ntokens in — out ' + formatTokens(300) + '\ncwd /w',
     ],
     [
       'output tokens with no prompt-side count',
       facts({ outputTokens: 300 }),
       false,
-      'session ' + SESSION + ' · viewing ' + VIEWED + ' · tokens in ' + formatTokens(0) + ' out ' + formatTokens(300) + ' · cwd /w',
+      'session ' + SESSION + '\nviewing ' + VIEWED + '\ntokens in — out ' + formatTokens(300) + '\ncwd /w',
     ],
     [
       'a prompt-side count with no output yet',
-      facts({ uncachedInputTokens: 1200 }),
+      facts({ inputTokens: 1200, uncachedInputTokens: 1200 }),
       false,
-      'session ' + SESSION + ' · viewing ' + VIEWED + ' · tokens in ' + formatTokens(1200) + ' out ' + formatTokens(0) + ' · cwd /w',
+      'session ' + SESSION + '\nviewing ' + VIEWED + '\ntokens in ' + formatTokens(1200) + ' out —\nuncached input ' + formatTokens(1200) + '\ncwd /w',
     ],
   ] as const)('states %s', (_label, read, viewingChild, expected) => {
     const given = fixture()
@@ -821,6 +821,7 @@ describe('createCommands keys', () => {
     const given = fixture()
     createCommands(given.ctx, given.ports).runSubmission({ kind: 'keys', argument: '' })
 
+    for (const key of 'chord') given.picker?.handleKey(key)
     const rows = given.picker?.card().rows ?? []
     expect(rows.some(row => row.description === 'chord')).toBe(true)
   })
@@ -997,5 +998,48 @@ describe('createCommands start', () => {
     await createCommands(given.ctx, given.ports).start()
 
     expect(given.calls.find(call => call.name === 'session.openAgent')?.args).toEqual([SESSION, true])
+  })
+})
+
+
+describe('command palette dispatch', () => {
+  it('opens a local picker without starting an agent turn', async () => {
+    const given = fixture()
+    given.pickerReply = '/model'
+    createCommands(given.ctx, given.ports).runSubmission({ kind: 'commands' })
+    await flush()
+    expect(given.placement).toBe('popup')
+    expect(given.calls.some(call => call.name === 'route.runModelCommand')).toBe(true)
+    expect(given.calls.some(call => call.name === 'staged.send')).toBe(false)
+  })
+  it('stages agent commands and preserves an existing draft', async () => {
+    const given = fixture()
+    let draft = ''
+    given.pickerReply = '/new'
+    const commands = createCommands(given.ctx, { ...given.ports, readDraft: () => draft, writeDraft: text => { draft = text } })
+    commands.runSubmission({ kind: 'commands' })
+    await flush()
+    expect(draft).toBe('/new ')
+    draft = 'a draft I am writing'
+    commands.runSubmission({ kind: 'commands' })
+    await flush()
+    expect(draft).toBe('a draft I am writing')
+    expect(given.calls.some(call => call.name === 'session.runNewCommand')).toBe(false)
+  })
+})
+
+describe('permissions picker', () => {
+  it('opening and cancelling reads the catalog without changing the active policy', async () => {
+    const given = fixture()
+    given.services.set('permissionPresets', { catalog: () => ({ options: [
+      {value:'read-only',name:'Read only'}, {value:'workspace-write',name:'Workspace'}, {value:'danger-full-access',name:'Full access'},
+    ] }), current: () => 'workspace-write' })
+    const registry = installRegistry(given, { listed: [{ name: 'permission', description: 'Permissions' }] })
+    const commands = createCommands(given.ctx, given.ports)
+    commands.runSubmission({ kind: 'permissions' })
+    await Promise.resolve()
+    expect(given.picker?.card().title).toBe('权限策略')
+    expect(given.picker?.card().rows.find(row => row.label === 'workspace-write')?.current).toBe(true)
+    expect(registry.executions).toEqual([])
   })
 })

@@ -1,3 +1,11 @@
+# GitHub source distribution
+
+This derivative is distributed as source from `hecongnan/deepseek-cli`. The package is marked `private` to prevent accidental npm publication under the upstream package name. No npm publishing workflow is enabled. Keep the package name for Harness plugin resolution.
+
+The policy below describes upstream dsh-tui releases and does not authorize publishing this derivative to npm. Source changes use branches, signed and DCO-signed commits, and pull requests.
+
+---
+
 # Release Policy
 
 Applies to maintainers. Current release owner: repository owner ([`LICENSE`](LICENSE)).

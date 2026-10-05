@@ -114,12 +114,16 @@ export class BoxedEditor extends Editor {
   /** Pointer offsets follow only the furniture actually drawn. */
   private railColumns = 0
   private topIndicatorRows = 0
+  private menuBelow = false
+  private ruledRows = 0
 
   constructor(
     tui: TUI,
     theme: EditorTheme,
     private readonly keymap: () => Keymap = defaultKeymap,
     private readonly ghost?: GhostBrush,
+    private readonly placeholder?: (text: string) => string,
+    private readonly rule?: (line: string) => string,
   ) {
     super(tui, theme, { paddingX: PADDING_X })
   }
@@ -263,11 +267,29 @@ export class BoxedEditor extends Editor {
     return true
   }
 
+  /** Placeholder paint never enters the draft, history, submission, or copy buffer. */
+  private placeholderRow(row: string): string {
+    if (this.placeholder === undefined || this.disableSubmit || this.getText() !== '') return row
+    const at = row.indexOf(CURSOR_AT_END)
+    if (at < 0) return row
+    const room = visibleWidth(row.slice(at + CURSOR_AT_END.length)) + 1
+    let drawn = ''
+    let used = 0
+    for (const glyph of ghostGraphemes('输入问题或任务…')) {
+      const cells = visibleWidth(glyph)
+      if (used + cells > room) break
+      drawn += glyph
+      used += cells
+    }
+    return row.slice(0, at) + this.placeholder(drawn) + ' '.repeat(room - used)
+  }
+
   override render(width: number): string[] {
     // Borrowed question editors remain dialog furniture, not conversation messages.
-    const enclosed = this.disableSubmit
+    const ruled = this.rule !== undefined && this.tui.terminal.rows >= 6 && width >= MIN_RAIL_WIDTH
+    const enclosed = this.disableSubmit && this.rule === undefined
     const minimum = enclosed ? MIN_BOX_WIDTH : MIN_RAIL_WIDTH
-    const side = width >= minimum ? this.borderColor(FRAME_GLYPHS.side) : ''
+    const side = width >= minimum ? this.borderColor(this.rule !== undefined ? '>' : !enclosed && this.placeholder !== undefined ? '❯' : FRAME_GLYPHS.side) : ''
     this.railColumns = side === '' ? 0 : enclosed ? FRAME_COLUMNS : RAIL_COLUMNS
     const boxed = enclosed && this.railColumns > 0
     const inside = width - this.railColumns
@@ -284,17 +306,23 @@ export class BoxedEditor extends Editor {
     this.menuRows = menu.length
     this.textRows = text.length
     this.mapped = true
+    this.menuBelow = this.rule !== undefined
+    this.ruledRows = ruled ? 1 : 0
     this.topIndicatorRows = boxed || this.hiddenAbove > 0 ? 1 : 0
-    const lines = menu.map(row => row + ' '.repeat(this.railColumns))
+    const menuLines = menu.map(row => row + ' '.repeat(this.railColumns))
+    const lines = this.menuBelow ? [] : [...menuLines]
+    if (ruled) lines.push(this.rule!('─'.repeat(width)))
     const indicator = (direction: string, count: number): string =>
       side + textRow(this.borderColor(`${direction} ${count} more`), inside)
     const edge = (open: string, row: string, close: string): string =>
       this.borderColor(open + stripTerminalSequences(row) + close)
     if (boxed) lines.push(edge(FRAME_GLYPHS.topLeft, rows[0] ?? '', FRAME_GLYPHS.topRight))
     else if (this.hiddenAbove > 0) lines.push(indicator('↑', this.hiddenAbove))
-    for (const row of text) lines.push(side + this.decorateText(this.ghostRow(row, ghost).replace(SYNTHETIC_CURSOR, '$1')) + (boxed ? side : ''))
+    for (const row of text) lines.push(side + this.decorateText(this.placeholderRow(this.ghostRow(row, ghost)).replace(SYNTHETIC_CURSOR, '$1')) + (boxed ? side : ''))
     if (boxed) lines.push(edge(FRAME_GLYPHS.bottomLeft, rows[closing]!.replace(CLOSING_TAG, ''), FRAME_GLYPHS.bottomRight))
     else if (this.hiddenBelow > 0) lines.push(indicator('↓', this.hiddenBelow))
+    if (ruled) lines.push(this.rule!('─'.repeat(width)))
+    if (this.menuBelow) lines.push(...menuLines)
     return lines
   }
 
@@ -310,6 +338,12 @@ export class BoxedEditor extends Editor {
   override handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
     if (!this.mapped) return super.handleMouse(event)
     const width = event.width - this.railColumns
+    if (this.menuBelow) {
+      const inputEnd = this.ruledRows * 2 + this.topIndicatorRows + this.textRows + (this.hiddenBelow > 0 ? 1 : 0)
+      if (event.y >= inputEnd) return super.handleMouse({ ...event, width, y: event.y - inputEnd + this.textRows + 2 })
+      if (event.y < this.ruledRows || event.y >= inputEnd - this.ruledRows) return { handled: true }
+      return super.handleMouse({ ...event, width, x: event.x - (this.railColumns > 0 ? RAIL_COLUMNS : 0), y: event.y - this.ruledRows + 1 - this.topIndicatorRows })
+    }
     if (event.y < this.menuRows) {
       return super.handleMouse({ ...event, width, y: event.y + this.textRows + 2 })
     }

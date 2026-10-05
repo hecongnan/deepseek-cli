@@ -4,6 +4,7 @@ import { renderTerminalText } from '../terminal-text.ts'
 import { formatTokens } from '../tokens.ts'
 import type { TuiToken } from '../theme-tokens.ts'
 import type { TuiTheme } from '../theme.ts'
+import { defaultKeymap, hintKeys, type Keymap } from '../input/actions.ts'
 
 /** Everything the footer states, gathered by the surface around it. */
 export interface StatusFacts {
@@ -29,6 +30,8 @@ export interface StatusFacts {
   readonly cacheRate: number | undefined
   /** Prompt tokens the provider did not have cached, when it reported any. */
   readonly uncachedInputTokens: number | undefined
+  /** Session input usage including uncached, cache-read and cache-write buckets. */
+  readonly inputTokens?: number | undefined
   /** Tokens this session has generated, when the provider reported any. */
   readonly outputTokens: number | undefined
   /** Drafts parked for this working directory; omitted when none are known. */
@@ -136,7 +139,7 @@ export function formatStatus(facts: StatusFacts, width: number, theme: TuiTheme)
       : `ctx ${formatTokens(facts.contextTokens)}/${formatTokens(facts.contextWindow)}`)
   }
   if (facts.cacheRate !== undefined) push('status.cache', `cache ${Math.round(facts.cacheRate * 100)}%`)
-  push('status.cwd', shortPath(facts.cwd, facts.home))
+  if (facts.cwd !== '') push('status.cwd', shortPath(facts.cwd, facts.home))
   // The row is one row whatever a fact carried: a break that survived the cut
   // would be written as a move down, over the row beneath the bar.
   return oneRow(renderSegments(segments, width, theme))
@@ -178,11 +181,12 @@ function renderSegments(segments: readonly Segment[], width: number, theme: TuiT
   return out === '' ? theme.cut('', Math.max(0, width), ELLIPSIS) : out
 }
 
-/** A one-row view of the state around the transcript. */
+/** Persistent session metrics, with transient feedback on a separate row. */
 export class StatusBar implements Component {
   constructor(
     private readonly facts: () => StatusFacts,
     private readonly theme: TuiTheme,
+    private readonly keys: () => Keymap = defaultKeymap,
   ) {}
 
   invalidate(): void {
@@ -190,6 +194,38 @@ export class StatusBar implements Component {
   }
 
   render(width: number): string[] {
-    return width <= 0 ? [] : [formatStatus(this.facts(), width, this.theme)]
+    if (width <= 0) return []
+    const facts = this.facts()
+    const segments: Segment[] = []
+    const add = (token: TuiToken, text: string | undefined) => {
+      if (text && this.theme.visible(token)) segments.push({ token, text, join: false })
+    }
+    const validCount = (value: number | undefined): value is number => value !== undefined && Number.isFinite(value) && value >= 0
+    const tokens = (value: number | undefined): string => validCount(value) ? formatTokens(value) : '—'
+    add('status.model', facts.model || '正在载入模型…')
+    const qualifiers = [facts.effort, ...(facts.modelHints ?? [])].filter(value => value !== undefined && value !== '')
+    if (facts.model && qualifiers.length > 0 && this.theme.visible('status.effort')) segments.push({ token: 'status.effort', text: ` (${qualifiers.join(SEPARATOR_TEXT)})`, join: true })
+    const remaining = validCount(facts.contextTokens) && validCount(facts.contextWindow) && facts.contextWindow > 0
+      ? `${Math.floor(Math.max(0, facts.contextWindow - facts.contextTokens) / facts.contextWindow * 100)}%`
+      : '—'
+    add('status.context', `上下文剩余 ${remaining}`)
+    add('status.context', `Token 入${tokens(facts.inputTokens)} / 出${tokens(facts.outputTokens)}`)
+    if (facts.cacheRate !== undefined && Number.isFinite(facts.cacheRate) && facts.cacheRate >= 0 && facts.cacheRate <= 1) {
+      add('status.cache', `缓存${Math.round(facts.cacheRate * 100)}%`)
+    }
+    const metrics = oneRow(renderSegments(segments, width, this.theme))
+    segments.length = 0
+    // Chords, work and parked drafts remain visible without displacing the metrics.
+    add('status.prefix', facts.chord)
+    add('status.back', facts.back)
+    if (facts.activity === 'working') {
+      add('status.activity.working', '正在处理')
+      add('status.elapsed', facts.elapsedMs === undefined ? undefined : elapsed(facts.elapsedMs))
+    }
+    if (facts.preset === 'danger-full-access') add('status.permission', facts.preset)
+    add('status.stash', facts.stashed && facts.stashed > 0 ? `草稿 ${facts.stashed}` : undefined)
+    if (facts.activity === 'working') add('status.cwd', `${hintKeys(this.keys(), 'surface.interrupt').split('/')[0]} 停止`)
+    const feedback = oneRow(renderSegments(segments, width, this.theme))
+    return feedback === '' ? [metrics] : [metrics, feedback]
   }
 }

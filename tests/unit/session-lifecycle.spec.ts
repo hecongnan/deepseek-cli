@@ -280,7 +280,7 @@ describe('createSessionLifecycle', () => {
       agentOptions: { provider: 'kimi-coding', model: 'kimi-k3' },
       meta: { cwd: process.cwd(), agentPreset: PRESET },
     })
-    expect(given.notices).toEqual([`session ${SESSION_A}`])
+    expect(given.notices).toEqual([])
     expect(given.renders()).toBe(1)
     expect(given.lifecycle.drivingAgent()).toBe(handle)
     expect(given.lifecycle.sessionOpened()).toBe(true)
@@ -378,7 +378,7 @@ describe('createSessionLifecycle', () => {
       'installCompletion',
     ])
     expect(given.resumed[0]).toMatchObject({ resumeSessionId: SESSION_A })
-    expect(given.notices).toEqual([`session ${SESSION_A} (resumed)`])
+    expect(given.notices).toEqual([])
   })
 
   it('hands a fork its inherited prefix and folds the branch it opened on', async () => {
@@ -453,7 +453,7 @@ describe('createSessionLifecycle', () => {
     expect(given.lifecycle.drivingAgent()?.sessionId).toBe(SESSION_B)
     expect(given.lifecycle.activeSession()).toBe(SESSION_B)
     expect(given.disposed()).toBe(1)
-    expect(given.notices.at(-1)).toBe(`session ${SESSION_B} (resumed)`)
+    expect(given.notices).toEqual([])
   })
 
   it('switches session by settling the new open before the outgoing agent goes', async () => {
@@ -476,7 +476,7 @@ describe('createSessionLifecycle', () => {
     ])
     expect(given.disposed()).toBe(1)
     expect(given.lifecycle.activeSession()).toBe(SESSION_B)
-    expect(given.notices.at(-1)).toBe(`session ${SESSION_B} (resumed)`)
+    expect(given.notices).toEqual([])
   })
 
   it('stops the agent it let go of, and stops it once', async () => {
@@ -579,7 +579,7 @@ describe('createSessionLifecycle', () => {
     given.lifecycle.runNewCommand('')
     await flush()
 
-    expect(given.notices).toEqual([`session ${SESSION_A}`, 'could not start a session: no preset is installed'])
+    expect(given.notices).toEqual(['could not start a session: no preset is installed'])
     // The old agent is gone and no new one exists, which the reader is told
     // rather than being left typing into a surface that answers nothing.
     expect(given.lifecycle.drivingAgent()).toBeUndefined()

@@ -14,7 +14,7 @@ const PROMPT_SPACING_ROWS = 1
 
 /** The parts of the surface the root layout stacks, top to bottom. */
 export interface SurfaceParts {
-  /** The transcript viewport, which takes every row nothing else claims. */
+  /** The transcript viewport, which grows only as the conversation needs rows. */
   readonly transcript: Component
   /** The work board: goals, plans, running jobs, and running subagents. */
   readonly dock: Component
@@ -22,6 +22,10 @@ export interface SurfaceParts {
   readonly queue: Component
   /** The prompt bar, borrowed when a question is answered in it. */
   readonly prompt: Component
+  /** Search and selection stay below the input instead of covering messages. */
+  readonly controls?: Component
+  /** Ruled input needs its text row even while an unfocused picker owns the cursor. */
+  readonly promptMinRows?: number
   /** The footer. */
   readonly status: Component
 }
@@ -36,7 +40,14 @@ export type MarginColumns = () => number
 
 /** The conversation and the work boards under it, which are what a margin insets. */
 function insetColumn(parts: SurfaceParts): VStack {
-  return new VStack([
+  // Natural measurement must include the transcript; its allocated viewport still
+  // starts at zero so work boards retain priority when the terminal is short.
+  class ConversationColumn extends VStack {
+    override render(width: number): string[] {
+      return [...parts.transcript.render(width), ...parts.dock.render(width)]
+    }
+  }
+  return new ConversationColumn([
     { component: parts.transcript, basis: 0, grow: 1, minSize: 1 },
     // Work state earns rows only when there is some, and it gives them up first:
     // a job ticker is worth less than the input the reader is typing into.
@@ -62,7 +73,7 @@ function inset(parts: SurfaceParts, margin: MarginColumns): HStack {
 /**
  * Stack the surface, deciding who gives up rows when the terminal is short.
  *
- * The transcript grows into whatever is left; the dock, the queue, and the bar
+ * Short conversations use their natural height; long ones scroll. The dock, queue, and bar
  * shrink in that order of eagerness, and the bar keeps a floor no shrink can
  * take. A dock that could not shrink held its whole height on a short terminal
  * and pushed the draft, its frame, and the footer out of the frame entirely,
@@ -76,15 +87,26 @@ function inset(parts: SurfaceParts, margin: MarginColumns): HStack {
 export function surfaceLayout(parts: SurfaceParts, margin: MarginColumns = () => 0): VStack {
   return new VStack([
     // A one-row terminal must lend its only row to input, not an empty transcript floor.
-    { component: inset(parts, margin), basis: 0, grow: 1, minSize: 0 },
+    { component: inset(parts, margin), basis: 'auto', shrink: 2, minSize: 0 },
     // Queued input earns rows only while something is waiting, and it gives
     // them up before the editor does: the bar being typed in outranks what is
     // waiting behind it.
-    { component: parts.queue, basis: 'auto', shrink: 2, minSize: 0 },
-    { component: new Spacer(PROMPT_SPACING_ROWS), basis: 'auto', shrink: 2, minSize: 0 },
+    { component: parts.queue, basis: 'auto', shrink: 2, minSize: 1, visible: viewport => viewport.height >= 6 && parts.queue.render(viewport.width).length > 0 },
+    { component: new Spacer(PROMPT_SPACING_ROWS), basis: 'auto', shrink: 0, minSize: 1, visible: viewport => viewport.height >= 6 },
     // The prompt already owns its editor layout; another stack repeats measurement.
-    { component: parts.prompt, basis: 'auto', shrink: 1, minSize: PROMPT_MIN_ROWS },
-    { component: new Spacer(PROMPT_SPACING_ROWS), basis: 'auto', shrink: 2, minSize: 0 },
-    { component: parts.status, basis: 'auto', shrink: 0, minSize: 1 },
+    ...(parts.promptMinRows === undefined ? [{ component: parts.prompt, basis: 'auto' as const, shrink: 1, minSize: PROMPT_MIN_ROWS }] : [
+      { component: parts.prompt, basis: 'auto' as const, shrink: 1, minSize: parts.promptMinRows, visible: (viewport: { height: number }) => viewport.height >= 6 },
+      { component: parts.prompt, basis: 'auto' as const, shrink: 1, minSize: PROMPT_MIN_ROWS, visible: (viewport: { height: number }) => viewport.height < 6 },
+    ]),
+    ...(parts.controls === undefined ? [
+      { component: new Spacer(PROMPT_SPACING_ROWS), basis: 'auto' as const, shrink: 0, minSize: 1, visible: (viewport: { height: number }) => viewport.height >= 6 },
+      { component: parts.status, basis: 'auto' as const, shrink: 0, minSize: 1 },
+    ] : [
+      { component: parts.status, basis: 'auto' as const, shrink: 0, minSize: 1 },
+      { component: new Spacer(PROMPT_SPACING_ROWS), basis: 'auto' as const, shrink: 2, minSize: 0, visible: (viewport: { width: number; height: number }) => viewport.height >= 6 && parts.controls!.render(viewport.width).length > 0 },
+      { component: parts.controls, basis: 'auto' as const, shrink: 2, minSize: 0 },
+    ]),
+    // Spare space follows the conversation so short sessions keep input within reach.
+    { component: new Spacer(0), basis: 0, grow: 1, minSize: 0 },
   ])
 }

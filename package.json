@@ -1,7 +1,7 @@
 {
   "name": "@sagmans/dsh-tui",
   "version": "0.13.0",
-  "description": "Terminal (CLI TUI) surface for DeepSeek Harness: interactive dsh in a terminal, no browser required",
+  "description": "DeepSeek CLI: clean conversation TUI, whale welcome, command palette and session metrics; based on dsh-tui",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -50,14 +50,18 @@
     ".agents/skills/dsh-tui-update-models",
     "themes",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "cli/main.mjs",
+    "cli/sessions.mjs",
+    "examples",
+    "README.upstream.md"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sagmans/dsh-tui.git"
+    "url": "git+https://github.com/hecongnan/deepseek-cli.git"
   },
-  "homepage": "https://github.com/sagmans/dsh-tui#readme",
-  "bugs": "https://github.com/sagmans/dsh-tui/issues",
+  "homepage": "https://github.com/hecongnan/deepseek-cli#readme",
+  "bugs": "https://github.com/hecongnan/deepseek-cli/issues",
   "engines": {
     "node": ">=22.19"
   },
@@ -89,7 +93,9 @@
     "prepare": "npm run build",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm test",
-    "drive": "node tools/pty-drive.mjs"
+    "drive": "node tools/pty-drive.mjs",
+    "test:cli": "node --test cli/cli.test.mjs",
+    "preview": "pnpm run build && node tools/reference-preview.mjs"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.4",
@@ -168,5 +174,9 @@
     "node-pty": "1.1.0",
     "typescript": "^5.9.0",
     "vitest": "^4.1.0"
+  },
+  "private": true,
+  "bin": {
+    "deepseek-cli": "cli/main.mjs"
   }
 }

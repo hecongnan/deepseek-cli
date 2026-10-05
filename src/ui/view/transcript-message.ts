@@ -6,7 +6,7 @@
  * the view reads back, so they belong together rather than beside the row cache
  * that only decides which of them to rebuild.
  */
-import { type MarkdownTheme, visibleWidth } from '@earendil-works/pi-tui'
+import { type MarkdownTheme, visibleWidth, stripTerminalSequences } from '@earendil-works/pi-tui'
 import { type Spacing } from '../../spacing.ts'
 import { type TranscriptEntry } from '../../transcript.ts'
 import { type TuiToken } from '../../theme-tokens.ts'
@@ -54,6 +54,7 @@ function recessiveMarkdownTheme(style: (text: string) => string, theme: TuiTheme
 }
 
 export interface MessagesContext {
+  readonly codex?: boolean
   readonly theme: TuiTheme
   readonly markdown: MarkdownRenderer
   readonly reasoningOpen: (entry: Extract<TranscriptEntry, { kind: 'reasoning' }>) => boolean
@@ -114,6 +115,23 @@ export class Messages {
      * only the drawing knows which columns of a row are the frame's.
      */
     pushFramed(lines: string[], copy: FrameRow[], text: string, width: number, live: boolean, face: MarkdownFace, borderToken: TuiToken): void {
+      if (this.context.codex === true && width > 2 && this.context.theme.visible(borderToken)) {
+        const body = this.markdownLines(text, width - 2, live, face, 2)
+        const air = gapRows(this.context.spacing().messages)
+        let first = true
+        lines.push(...air)
+        for (const line of body) {
+          const user = borderToken === 'transcript.user.border'
+          const lead = first && user ? '> ' : '  '
+          const content = user ? this.context.theme.style('transcript.user', line) : line
+          const drawn = line === '' ? '' : this.context.theme.cut(`${this.context.theme.style(borderToken, lead)}${content}`, width, '')
+          lines.push(drawn)
+          copy.push({ drawn: stripTerminalSequences(drawn).trimEnd(), ...(drawn === '' ? {} : { frame: { lead: 2, trail: 0 } }) })
+          if (line !== '') first = false
+        }
+        lines.push(...air)
+        return
+      }
       const framed = canFrame(width, this.context.theme.visible(borderToken), true)
       const inside = framed ? width - RAIL_COLUMNS : width
       const body = this.markdownLines(text, textWidth(inside), live, face)
@@ -167,6 +185,10 @@ export class Messages {
       // the surface loses its tail to the terminal, and the terminal's clamp is not
       // one this component can count on.
       lines.push(this.context.theme.cut(lined, width, '…'))
+      if (this.context.codex === true && !open && entry.body !== '' && this.context.theme.visible('transcript.reasoning.body')) {
+        const preview = entry.body.split(/\r?\n/u).find(line => line.trim() !== '') ?? ''
+        lines.push(this.context.theme.cut(`  ${this.context.theme.rich(preview, { token: 'transcript.reasoning.body', column: 2 })}`, width, '…'))
+      }
       if (open && this.context.theme.visible('transcript.reasoning.body')) {
         this.pushMarkdown(lines, entry.body, width, entry.live, this.reasoningFace(), DETAIL_INDENT)
       }

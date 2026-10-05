@@ -120,8 +120,11 @@ export class ListPicker<Row> {
      * reordered the rows under it.
      */
     private readonly onCursor?: (row: Row | undefined) => void,
+    /** Keep confirmation on the currently active value when the picker opens. */
+    initialId?: string,
   ) {
     this.filter = initialFilter
+    if (initialId !== undefined) this.cursor = Math.max(0, this.visible().findIndex(row => this.idOf(row) === initialId))
   }
 
   /** Rows matching the typed filter, best match first. */

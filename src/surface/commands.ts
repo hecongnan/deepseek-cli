@@ -1,3 +1,4 @@
+import { configPaths, localHealth, formatHealth, workspaceChanges } from '../local-diagnostics.ts'
 import { writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -8,12 +9,14 @@ import { defaultExportFile, ensureExportsHome, exportsHomeDir, transcriptToText 
 import type { ActionLayer } from '../input/action-catalog.ts'
 import type { RegisteredCommand } from '../input/completion.ts'
 import { chordKeysLine, surfaceKeysLine } from '../input/keymap.ts'
-import { LOCAL_COMMANDS, type Submission } from '../input/submission.ts'
+import { classifySubmission, type Submission } from '../input/submission.ts'
+import { CommandPicker, commandRows, groupedHelp } from '../ui/command-picker.ts'
 import { KEYMAP_LAYERS, keymapLayer } from '../keys-command.ts'
 import type { PromptStash } from '../stash.ts'
 import { clipboardSequence } from '../terminal/clipboard.ts'
 import { windowTitle } from '../terminal/title.ts'
 import { formatTokens } from '../tokens.ts'
+import { ListPicker } from '../ui/picker.ts'
 import { KeymapPicker } from '../ui/keymap-picker.ts'
 import type { StatusFacts } from '../ui/status.ts'
 import { describeTodos, planSelectedActive, planToggleLine, readPlanState, type PlanModeState } from '../work.ts'
@@ -100,6 +103,8 @@ export interface CommandsPorts {
   /** The bank the parked-draft commands read, late-bound behind the picker it needs. */
   readonly stash: () => PromptStash | undefined
   readonly render: () => void
+  readonly readDraft?: () => string
+  readonly writeDraft?: (text: string) => void
 }
 
 /** The operations the composing surface routes back into the command plane. */
@@ -206,14 +211,57 @@ export function createCommands(ctx: Context, ports: CommandsPorts): Commands {
     ports.render()
   }
 
-  const helpText = (): string => {
+  const registeredNow = (): readonly RegisteredCommand[] => {
     const current = ports.session.drivingAgent()?.agent
-    // Read once: the registry is the surface's own lookup, and asking it twice
-    // for one line would let a changing roster answer the two halves differently.
-    const roster = registry()
-    const registered = current === undefined || roster === undefined ? [] : roster.list(current).map(command => `/${command.name}`)
-    const commands = registered.length === 0 ? 'none registered yet' : registered.join(' ')
-    return `commands: ${commands} · surface: ${LOCAL_COMMANDS.join(' ')} · keys: ${surfaceKeysLine(ports.appearance.keymap())} · ${chordKeysLine(ports.appearance.keymap())}`
+    return current === undefined ? [] : registry()?.list(current) ?? []
+  }
+  const helpText = (query = ''): string => groupedHelp(registeredNow(), query)
+  const openPermissions = (): void => {
+    const agent = ports.session.drivingAgent()?.agent
+    if (agent === undefined) { runCommand('permission', '/permission'); return }
+    const presets = ctx.get('agentPresets') as ServiceFor | undefined
+    const service = (presets?.serviceFor(agent, 'permissionPresets') ?? ctx.get('permissionPresets')) as {
+      catalog?: () => { readonly options: readonly { readonly value: string; readonly name: string; readonly description?: string }[] }
+      current?: (session: unknown) => string
+    } | undefined
+    if (typeof service?.catalog !== 'function') { runCommand('permission', '/permission'); return }
+    const options = service.catalog().options
+    const current = service.current?.(agent.session) ?? ports.statusFacts().preset
+    const labels: Readonly<Record<string, string>> = {
+      'read-only': '只读：修改和命令按现有策略审批',
+      'workspace-write': '允许工作区写入；工作区外操作按现有策略审批',
+      'danger-full-access': '完整访问：取消沙箱隔离和审批限制',
+    }
+    const picker = new ListPicker(() => options, () => '权限策略', row => row.value,
+      row => ({ label: row.value, description: `${labels[row.value] ?? row.description ?? ''}${row.value === current ? ' · 当前' : ''}`, current: row.value === current }),
+      row => `${row.value} ${row.name} ${labels[row.value] ?? row.description ?? ''}`,
+      { empty: () => '没有匹配项', listed: () => '↑↓ 选择 · Enter 应用 · Esc 返回' }, ports.appearance.keymap, '', undefined, current)
+    void ports.modals.openPicker(picker, undefined, 'popup').then(value => {
+      if (value === undefined) return
+      if (ports.session.drivingAgent()?.agent !== agent) { ports.transcript.notice('会话已切换，请重新选择权限策略。'); ports.render(); return }
+      if (!options.some(option => option.value === value)) return
+      runCommand('permission', `/permission ${value}`)
+    }).catch(error => { ports.transcript.notice(`权限列表无法打开：${String(error)}`); ports.render() })
+  }
+
+  const openCommandPalette = (): void => {
+    // Argument-bearing or agent commands are staged for review before submission.
+    const immediate = new Set(['/permissions', '/approvals', '/keymap', '/ps', '/agent', '/doctor', '/config', '/diff', '/help', '/status', '/model', '/preset', '/resume', '/keys', '/theme', '/jobs', '/subagents', '/todo', '/copy', '/stash-list'])
+    void ports.modals.openPicker(new CommandPicker(() => commandRows(registeredNow()), ports.appearance.keymap), undefined, 'popup')
+      .then(name => {
+        if (name === undefined) return
+        if (immediate.has(name)) runSubmission(classifySubmission(name))
+        else {
+          if (ports.readDraft?.().trim()) {
+            ports.transcript.notice('输入框中有未发送的草稿 · 请先保存或清空，再选择需要参数的命令')
+            ports.render()
+            return
+          }
+          ports.writeDraft?.(`${name} `)
+          ports.transcript.notice(`${name} 已放入输入框 · 补充参数后按 Enter 执行`)
+          ports.render()
+        }
+      }).catch(error => { ports.transcript.notice(`命令面板无法打开：${String(error)}`); ports.render() })
   }
 
   /**
@@ -244,7 +292,7 @@ export function createCommands(ctx: Context, ports: CommandsPorts): Commands {
       return
     }
     if (commands === undefined || commands.find(current.agent, name) === undefined) {
-      ports.transcript.notice(`unknown command: /${name} — ${helpText()}`)
+      ports.transcript.notice(`unknown command: /${name} · /commands 搜索命令，/help 查看指南`)
       ports.render()
       return
     }
@@ -309,6 +357,9 @@ export function createCommands(ctx: Context, ports: CommandsPorts): Commands {
       case 'theme':
         ports.appearance.runThemeCommand(submission.argument)
         return
+      case 'permissions':
+        openPermissions()
+        return
       case 'keys': {
         const layer = submission.argument === '' ? undefined : keymapLayer(submission.argument)
         // A layer that does not exist is not a filter that matches nothing: the
@@ -369,11 +420,13 @@ export function createCommands(ctx: Context, ports: CommandsPorts): Commands {
           facts.agentPreset === undefined ? undefined : `mode ${facts.agentPreset}`,
           facts.preset === undefined ? undefined : `permissions ${facts.preset}`,
           context,
-          facts.uncachedInputTokens === undefined && facts.outputTokens === undefined
+          facts.cacheRate === undefined ? undefined : `cache ${Math.round(facts.cacheRate * 100)}%`,
+          facts.inputTokens === undefined && facts.outputTokens === undefined
             ? undefined
-            : `tokens in ${formatTokens(facts.uncachedInputTokens ?? 0)} out ${formatTokens(facts.outputTokens ?? 0)}`,
+            : `tokens in ${facts.inputTokens === undefined ? '—' : formatTokens(facts.inputTokens)} out ${facts.outputTokens === undefined ? '—' : formatTokens(facts.outputTokens)}`,
+          facts.uncachedInputTokens === undefined ? undefined : `uncached input ${formatTokens(facts.uncachedInputTokens)}`,
           `cwd ${facts.cwd}`,
-        ].filter(part => part !== undefined).join(' · '))
+        ].filter(part => part !== undefined).join('\n'))
         ports.render()
         return
       }
@@ -387,8 +440,15 @@ export function createCommands(ctx: Context, ports: CommandsPorts): Commands {
       case 'redo':
         ports.staged.redo()
         return
+      case 'local-info':
+        ports.transcript.notice(submission.command === 'doctor' ? formatHealth(localHealth()) : submission.command === 'config' ? Object.entries(configPaths()).map(([key, value]) => `${key}: ${value}`).join('\n') : workspaceChanges())
+        ports.render()
+        return
+      case 'commands':
+        openCommandPalette()
+        return
       case 'help':
-        ports.transcript.notice(helpText())
+        ports.transcript.notice(helpText(submission.argument))
         ports.render()
         return
       case 'resume':

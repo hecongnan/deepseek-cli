@@ -3,7 +3,10 @@ export type Submission =
   | { readonly kind: 'empty' }
   | { readonly kind: 'quit' }
   | { readonly kind: 'clear' }
-  | { readonly kind: 'help' }
+  | { readonly kind: 'help'; readonly argument?: string }
+  | { readonly kind: 'commands' }
+  | { readonly kind: 'permissions' }
+  | { readonly kind: 'local-info'; readonly command: 'doctor' | 'config' | 'diff' }
   | { readonly kind: 'resume' }
   | { readonly kind: 'status' }
   | { readonly kind: 'model'; readonly argument: string }
@@ -46,40 +49,54 @@ export type Submission =
 
 /** Commands the surface answers itself, without a model turn. */
 export const LOCAL_COMMANDS = [
-  '/help', '/status', '/model', '/preset', '/todo', '/theme', '/keys', '/jobs', '/subagents', '/fork', '/new', '/reload', '/undo', '/redo', '/rename', '/export', '/copy', '/history', '/clear', '/resume', '/quit', '/exit',
+  '/review', '/init', '/permissions', '/approvals', '/keymap', '/ps', '/agent', '/plan', '/screen-clear',
+  '/commands', '/doctor', '/config', '/diff', '/help', '/status', '/model', '/preset', '/todo', '/theme', '/keys', '/jobs', '/subagents', '/fork', '/new', '/reload', '/undo', '/redo', '/rename', '/export', '/copy', '/history', '/clear', '/resume', '/quit', '/exit',
   '/stash', '/stash-pop', '/stash-apply', '/stash-list', '/stash-drop', '/stash-clear',
 ] as const
 
 /** What each local command does, shown in the editor's completion menu. */
 export const LOCAL_COMMAND_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  '/help': 'list registered and local commands',
-  '/status': 'show the session, model, permissions, and context',
-  '/model': 'open the model picker (type to filter); /model <provider>/<model> switches directly',
-  '/preset': 'choose the agent preset (mode) this session runs',
-  '/jobs': 'list background jobs, read one, or kill one',
-  '/subagents': 'list delegations; /subagents open <id|last> reads one, /subagents kill <id> stops one',
-  '/todo': 'show the list of tasks the agent is keeping',
-  '/theme': 'open the theme picker, the screen previewing each row; /theme <name> applies one; /theme tokens lists the elements',
-  '/keys': 'open the key map and filter it by typing; /keys <layer> narrows it',
-  '/fork': 'branch this conversation and continue in the branch',
-  '/new': 'start a fresh session without leaving the terminal',
-  '/reload': 'recompose this session from its preset and replay the transcript',
-  '/undo': 'hide the newest prompt and its turn, and put that prompt back in the bar',
-  '/redo': 'step forward again after an undo',
-  '/copy': 'copy the last answer to the clipboard through the terminal',
-  '/history': 'show where prompt history is kept; /history clear forgets every prompt',
-  '/rename': 'give this session a title the picker will show',
-  '/export': 'write the visible transcript to a markdown file',
-  '/clear': 'clear the visible transcript',
-  '/resume': 'open another stored session',
-  '/stash': 'store the draft typed after it; ctrl+x then s parks the editor',
-  '/stash-pop': 'put a stashed draft (newest by default) into the editor and remove it',
-  '/stash-apply': 'put a stashed draft (newest by default) into the editor and keep it',
-  '/stash-list': 'open the current stash bank; enter pops one',
-  '/stash-drop': 'delete a stashed draft (newest by default) without using it',
-  '/stash-clear': 'delete every draft in the current stash bank after a confirmation',
-  '/quit': 'leave and print the resume command',
-  '/exit': 'leave and print the resume command',
+  '/review': '审查当前 Git 变更，输出问题和文件位置',
+  '/init': '检查项目并生成 AGENTS.md 指南',
+  '/doctor': '诊断运行环境与依赖',
+  '/config': '查看配置文件位置',
+  '/diff': '查看 Git 变更补丁',
+  '/commands': '搜索并打开命令',
+  '/help': '查看分组帮助',
+  '/status': '模型、权限与用量',
+  '/model': '切换模型与推理强度',
+  '/preset': '选择代理模式',
+  '/jobs': '查看、读取或停止后台任务',
+  '/subagents': '查看、打开或停止子代理',
+  '/todo': '查看任务列表',
+  '/theme': '选择界面主题',
+  '/keys': '搜索快捷键',
+  '/fork': '分支当前会话',
+  '/new': '开始新会话',
+  '/reload': '重新载入会话配置',
+  '/undo': '回退最近一轮',
+  '/redo': '恢复已回退的一轮',
+  '/copy': '复制最近回答',
+  '/history': '提示词历史设置',
+  '/rename': '修改会话标题',
+  '/export': '导出 Markdown 对话',
+  '/clear': '新建会话并清空显示',
+  '/screen-clear': '仅清空显示，保留上下文',
+  '/permissions': '查看或切换权限策略',
+  '/approvals': '权限命令兼容别名',
+  '/keymap': '查看和搜索快捷键',
+  '/ps': '查看、读取或停止后台任务',
+  '/agent': '查看、打开或停止子代理',
+  '/plan': '切换计划模式',
+  '/resume': '恢复历史会话',
+  '/stash': '保存提示词草稿',
+  '/stash-pop': '取出草稿',
+  '/stash-apply': '载入并保留草稿',
+  '/stash-list': '选择已存草稿',
+  '/stash-drop': '删除一个草稿',
+  '/stash-clear': '确认后清空草稿库',
+  '/quit': '退出并显示恢复命令',
+  '/exit': '退出并显示恢复命令',
 }
 
 /**
@@ -93,8 +110,30 @@ export function classifySubmission(text: string): Submission {
   const trimmed = text.trim()
   if (trimmed === '') return { kind: 'empty' }
   if (trimmed === '/quit' || trimmed === '/exit') return { kind: 'quit' }
-  if (trimmed === '/clear') return { kind: 'clear' }
+  if (trimmed === '/clear') return { kind: 'new', title: '' }
+  if (trimmed === '/screen-clear') return { kind: 'clear' }
+  if (trimmed === '/plan') return { kind: 'plan' }
+  if (trimmed === '/review' || trimmed.startsWith('/review ')) return {
+    kind: 'prompt', text: `请审查当前工作区的 Git 已暂存、未暂存变更及相关未跟踪代码。仅进行只读检查，不修改文件、不提交。优先报告明确可复现的缺陷，标明优先级、文件和行号；没有问题时说明检查范围和未验证项。额外要求：${trimmed.slice(7).trim() || '无'}`,
+  }
+  if (trimmed === '/init') return {
+    kind: 'prompt', text: '请检查当前项目的结构、现有文档和开发命令，编写适合本项目的 AGENTS.md，包含构建、验证和代码规范。先读取已有 AGENTS.md；如果它已存在且内容完整，保留它并报告建议，不覆盖用户已有指令。不要猜测未验证的命令，不修改其他文件。',
+  }
+
+  const alias = /^\/(permissions|approvals|keymap|ps|agent)(?:\s+(.*))?$/su.exec(trimmed)
+  if (alias !== null) {
+    const argument = alias[2]?.trim() ?? ''
+    switch (alias[1]) {
+      case 'permissions': case 'approvals': return argument === '' ? { kind: 'permissions' } : { kind: 'command', name: 'permission', line: `/permission ${argument}` }
+      case 'keymap': return { kind: 'keys', argument }
+      case 'ps': return { kind: 'jobs', argument }
+      case 'agent': return { kind: 'subagents', argument }
+    }
+  }
+  if (trimmed === '/doctor' || trimmed === '/config' || trimmed === '/diff') return { kind: 'local-info', command: trimmed.slice(1) as 'doctor' | 'config' | 'diff' }
+  if (trimmed === '/commands') return { kind: 'commands' }
   if (trimmed === '/help') return { kind: 'help' }
+  if (trimmed.startsWith('/help ')) return { kind: 'help', argument: trimmed.slice(5).trim() }
   if (trimmed === '/resume') return { kind: 'resume' }
   if (trimmed === '/status') return { kind: 'status' }
   if (trimmed === '/model' || trimmed.startsWith('/model ')) {

@@ -63,6 +63,7 @@ const collapsedEdge = (width: number): number => Math.max(1, width - COLLAPSED_E
 const DETAIL_INDENT = '    '
 
 export interface ToolCardsContext {
+  readonly codex?: boolean
   readonly theme: TuiTheme
   readonly keymap: () => Keymap
   readonly toolDisplay: (tool: string) => ToolDisplaySpec
@@ -110,6 +111,10 @@ export class ToolCards {
       // render time is the only clock it can be shown with: the fold holds the one
       // timestamp this window has.
       const card = this.cardOf(entry.card, live)
+      if (this.context.codex === true && card.kind === 'terminal' && card.subCalls === undefined) {
+        this.pushTerminal(lines, entry, card, width, spans)
+        return
+      }
       const spec = this.context.toolDisplay(card.tool)
       const expanded = this.context.expansionOf(entry)
       const start = lines.length
@@ -187,6 +192,38 @@ export class ToolCards {
       const cardStart = nestedKey === undefined ? start : nested ? callsEnd : headerEnd
       if (key !== undefined && lines.length > cardStart) spans.push({ key, start: cardStart, end: lines.length, expanded })
     }
+  /** Command and output form one compact, clickable block; errors remain visible. */
+  private pushTerminal(lines: string[], entry: Extract<TranscriptEntry, { kind: 'tool' }>, card: ToolCard, width: number, spans: ClickSpan[]): void {
+    const start = lines.length
+    const expanded = this.context.expansionOf(entry)
+    const spec = this.context.toolDisplay(card.tool)
+    const preview: CardPreview = expanded ? { expanded: true } : spec.output === 'tail' || card.failed
+      ? { expanded: false, preview: 'tail', rows: Math.max(1, spec.tail) }
+      : { expanded: false, preview: 'title' }
+    const { lines: detail, hidden } = cardDetailRows(card, preview)
+    const token = this.titleToken(card, { running: 'tool.running.title', failed: 'tool.failed.title' })
+    const verb = card.failed ? 'Failed' : card.running === true ? 'Running' : 'Ran'
+    const argument = card.argument ?? card.title ?? card.tool
+    if (this.context.theme.visible(token)) {
+      this.pushStyledWrapped(lines, this.context.theme.rich(`${verb} ${argument}`, { token, column: 2 }), width, '• ')
+    }
+    let first = true
+    for (const row of detail) {
+      const drawn = this.detailRow(row, card.kind)
+      if (drawn === '') continue
+      this.pushStyledWrapped(lines, drawn, width, first ? '  └ ' : DETAIL_INDENT)
+      first = false
+    }
+    if (card.failed && card.status !== undefined && this.context.theme.visible('tool.terminal.status')) {
+      this.pushStyledWrapped(lines, this.context.theme.rich(card.status, { token: 'tool.failed.title' }), width, first ? '  └ ' : DETAIL_INDENT)
+    }
+    if (hidden > 0 && this.context.theme.visible('tool.hint')) {
+      const hint = expanded ? shellRetentionHint(hidden) : shellFoldHint(hidden, this.context.cardOpenHint())
+      if (hint !== undefined) this.pushStyledWrapped(lines, this.context.theme.style('tool.hint', hint), width, DETAIL_INDENT)
+    }
+    const key = this.context.toolKey(entry.id)
+    if (key !== undefined && lines.length > start) spans.push({ key, start, end: lines.length, expanded })
+  }
   /**
      * The calls one card dispatched, one entry each.
      *

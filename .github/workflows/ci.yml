@@ -33,6 +33,8 @@ jobs:
         run: pnpm typecheck
       - name: Unit and golden tests
         run: pnpm test
+      - name: CLI tests
+        run: node --test cli/cli.test.mjs
       # The release guard suite runs on every change because a regression here
       # would first surface as an unrecoverable registry write.
       - name: Release helper tests

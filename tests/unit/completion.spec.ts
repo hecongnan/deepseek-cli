@@ -36,12 +36,12 @@ describe('commandMenu', () => {
     // nothing about what it runs, which is the menu's whole job; the first row's
     // exact bytes pin the wording the reader is shown.
     expect(commandMenu([]).every(item => (item.description ?? '') !== '')).toBe(true)
-    expect(commandMenu([])[0]).toEqual({ name: 'help', description: 'list registered and local commands' })
+    expect(commandMenu([])[0]).toEqual({ name: 'review', description: '审查当前 Git 变更，输出问题和文件位置' })
   })
 
   it('lists the registry commands after the local ones', () => {
     const menu = commandMenu([{ name: 'plan', description: 'toggle plan mode' }])
-    expect(menu.map(item => item.name)).toEqual([...LOCAL_COMMANDS.map(name => name.slice(1)), 'plan'])
+    expect(menu.map(item => item.name)).toEqual(LOCAL_COMMANDS.map(name => name.slice(1)))
   })
 })
 
@@ -91,7 +91,7 @@ describe('file completion on the at-sign', () => {
   it('still completes commands and paths when no at-sign is typed', async () => {
     const provider = providerFor([])
     const command = await provider.getSuggestions(['/com'], 0, 4, { signal })
-    expect(command?.items.map(item => item.value)).toEqual(['compact'])
+    expect(command?.items.map(item => item.value)).toEqual(['commands', 'compact'])
 
     const root = mkdtempSync(join(tmpdir(), 'dsh-tab-'))
     scratch.push(root)

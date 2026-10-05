@@ -34,6 +34,7 @@ export const LIST_MODELS_SERVICE = 'tuiListModels'
 interface LaunchOptions {
   readonly resume?: string | boolean
   readonly new?: boolean
+  readonly prompt?: string
   readonly model?: string
   readonly provider?: string
   readonly preset?: string
@@ -76,6 +77,7 @@ function launchOf(
       sessionId: identity.id,
       resume: identity.resume,
       resumePicker: intent.resumePicker,
+      initialPrompt: options.prompt,
       model: options.model?.trim() || undefined,
       provider: options.provider?.trim() || undefined,
       preset: options.preset?.trim() || undefined,
@@ -100,7 +102,8 @@ export function apply(ctx: Context): void {
     .argument('[session]', 'session id to resume (with the resume mode)')
     .option('--resume [session]', 'resume a persisted session (bare flag opens the picker)')
     .option('--new', 'start a fresh session without the history picker')
-    .option('--model <model>', 'override the default model id')
+    .option('--prompt <text>', 'submit an initial task after opening the session')
+    .option('-m, --model <model>', 'override the default model id')
     .option('--provider <provider>', 'override the default provider route')
     .option('--preset <preset>', 'agent preset (mode) the new session runs')
     .option('--no-color', 'disable ANSI styling')

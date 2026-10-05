@@ -122,6 +122,24 @@ describe('BoxedEditor', () => {
     for (const line of lines) expect(visibleWidth(line)).toBe(WIDTH)
   })
 
+  it('puts reference completions below the ruled input and maps menu and text clicks', async () => {
+    const instance = new BoxedEditor(surface(), createTheme('none').editor, defaultKeymap, undefined, text => text, line => line)
+    instance.focused = true
+    completions(instance)
+    instance.handleInput('/')
+    await settle(() => instance.isShowingAutocomplete())
+    const lines = instance.render(WIDTH)
+    expect(lines[0]).toBe('─'.repeat(WIDTH))
+    expect(lines[1]).toContain('> /')
+    expect(lines[2]).toBe('─'.repeat(WIDTH))
+    expect(lines[3]).toContain('help')
+    instance.handleMouse(mouse({ x: 6, y: 4 }))
+    expect(instance.getText()).toBe('/hello ')
+    instance.render(WIDTH)
+    instance.handleMouse(mouse({ x: EDGE_AND_PADDING + 2, y: 1 }))
+    expect(instance.getCursor().col).toBe(2)
+  })
+
   it('puts the cursor where a click inside the frame lands', () => {
     const instance = editor()
     instance.setText('hello')
@@ -475,5 +493,23 @@ describe('prompt-history ghost completion', () => {
     const plain = new BoxedEditor(surface(), theme.editor)
     plain.setText('a'.repeat(27))
     expect(painted.render(WIDTH)).toEqual(plain.render(WIDTH))
+  })
+})
+
+
+describe('quiet prompt affordance', () => {
+  it('paints a width-bounded empty hint without adding it to the editable draft', () => {
+    const instance = new BoxedEditor(surface(), createTheme('none').editor, defaultKeymap, undefined, text => text)
+    instance.focused = true
+    expect(instance.render(40).join('')).toContain('❯')
+    expect(instance.render(40).join('')).toContain('输入问题或任务…')
+    expect(instance.getText()).toBe('')
+    for (const width of [1, 2, 3, 5, 10]) expect(instance.render(width).every(row => visibleWidth(row) <= width)).toBe(true)
+    instance.setText('真正的草稿')
+    expect(instance.render(40).join('')).not.toContain('输入问题或任务…')
+    expect(instance.getText()).toBe('真正的草稿')
+    instance.setText('')
+    instance.disableSubmit = true
+    expect(instance.render(40).join('')).not.toContain('输入问题或任务…')
   })
 })
