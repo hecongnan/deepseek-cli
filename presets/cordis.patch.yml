@@ -1,0 +1,14 @@
+# Agent preset cordis: the mode this bundle's roster registers, and the whole
+# of what it declares.
+#
+# A mode is a selection, not a composition. The rows that make up an agent's
+# tools, prompt sections, skills and planning live in the bundle each of them
+# belongs to, so listing them here would register a plugin this bundle does not
+# own a second time and fail composition in a profile that already has it.
+- insert:
+    - id: preset-cordis
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: cordis
+        order: 4
+        plugins: []

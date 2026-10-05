@@ -1,0 +1,424 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`a mermaid reply > renders the diagram at 40 columns 1`] = `
+[
+  "",
+  "│ The fold keeps a session small.       ",
+  "│                                       ",
+  "│ \`\`\`mermaid                            ",
+  "│   flowchart TB                        ",
+  "│     A["read the event log"] -->       ",
+  "│ B["fold settled entries"]             ",
+  "│     B --> C{"cursor moved?"}          ",
+  "│     C -->|"yes"| D["rebuild the       ",
+  "│ rows"]                                ",
+  "│     C -->|"no"| E["reuse the cache"]  ",
+  "│ \`\`\`                                   ",
+  "│                                       ",
+  "│ Settled rows are cached.              ",
+  "",
+]
+`;
+
+exports[`a mermaid reply > renders the diagram at 80 columns 1`] = `
+[
+  "",
+  "│ The fold keeps a session small.                                               ",
+  "│                                                                               ",
+  "│           ┌────────────────────┐                                              ",
+  "│           │ read the event log │                                              ",
+  "│           └──────────┬─────────┘                                              ",
+  "│                      │                                                        ",
+  "│                      ▼                                                        ",
+  "│          ┌──────────────────────┐                                             ",
+  "│          │ fold settled entries │                                             ",
+  "│          └───────────┬──────────┘                                             ",
+  "│                      │                                                        ",
+  "│                      ▼                                                        ",
+  "│              ╔═══════════════╗                                                ",
+  "│              ║ cursor moved? ║                                                ",
+  "│              ╚═══════╤═══════╝                                                ",
+  "│           ┌──────────┴───────────┐                                            ",
+  "│           ▼yes                   ▼no                                          ",
+  "│ ┌──────────────────┐    ┌─────────────────┐                                   ",
+  "│ │ rebuild the rows │    │ reuse the cache │                                   ",
+  "│ └──────────────────┘    └─────────────────┘                                   ",
+  "│                                                                               ",
+  "│ Settled rows are cached.                                                      ",
+  "",
+]
+`;
+
+exports[`golden frames > renders a busy dock at 40 columns 1`] = `
+[
+  "",
+  "◎ goal round 6/256 · complete the plan …",
+  "",
+  "⏸ plan mode · answer the plan before ed…",
+  "",
+  "┄┄ ⚇ subagents · 1 running ┄┄┄┄┄┄┄┄┄┄┄┄┄",
+  "  ▸ c000cfa3 · spawn · running 4s",
+  "",
+  "┄┄ ⛭ jobs · 1 running ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
+  "  ▸ bash-1 · running 12s — sleep 45 && …",
+  "",
+  "┄┄ ☰ todos · 1 left ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
+  "  ▸ verify the dock",
+]
+`;
+
+exports[`golden frames > renders a busy dock at 80 columns 1`] = `
+[
+  "",
+  "◎ goal round 6/256 · complete the plan for this dsh-tui plugin",
+  "",
+  "⏸ plan mode · answer the plan before edits happen",
+  "",
+  "┄┄ ⚇ subagents · 1 running ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
+  "  ▸ c000cfa3 · spawn · running 4s",
+  "",
+  "┄┄ ⛭ jobs · 1 running ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
+  "  ▸ bash-1 · running 12s — sleep 45 && echo bg-done",
+  "",
+  "┄┄ ☰ todos · 1 left ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
+  "  ▸ verify the dock",
+]
+`;
+
+exports[`golden frames > renders a call that has not answered yet at 40 columns 1`] = `
+[
+  "",
+  "│ run the suite                         ",
+  "",
+  "bash pnpm test · ~12s",
+]
+`;
+
+exports[`golden frames > renders a call that has not answered yet at 80 columns 1`] = `
+[
+  "",
+  "│ run the suite                                                                 ",
+  "",
+  "bash pnpm test · ~12s",
+]
+`;
+
+exports[`golden frames > renders a program's calls by state at 40 columns 1`] = `
+[
+  "",
+  "│ check the tree                        ",
+  "",
+  "run_code · ~12s",
+  "  bash git status · exit 0",
+  "  bash exit 3 · exit 1",
+  "  bash pnpm test",
+]
+`;
+
+exports[`golden frames > renders a program's calls by state at 80 columns 1`] = `
+[
+  "",
+  "│ check the tree                                                                ",
+  "",
+  "run_code · ~12s",
+  "  bash git status · exit 0",
+  "  bash exit 3 · exit 1",
+  "  bash pnpm test",
+]
+`;
+
+exports[`golden frames > renders a question gate at 40 columns 1`] = `
+[
+  "",
+  "? which deployment target?  (1/2)",
+  "    showing 1–2 of 9",
+  "   ❯ [ ] 1. staging-eu-west-1 — canary",
+  "            the rollout behind an audit",
+  "            window",
+  "     [ ] 2. production",
+  "     [ ] 0. other — type your own answer",
+  "   space select · digits pick · 0 answer",
+  "   freely · type to filter · enter",
+  "   confirm · esc skip",
+]
+`;
+
+exports[`golden frames > renders a question gate at 80 columns 1`] = `
+[
+  "",
+  "? which deployment target?  (1/2)",
+  "    showing 1–2 of 9",
+  "   ❯ [ ] 1. staging-eu-west-1 — canary the rollout behind an audit window",
+  "     [ ] 2. production",
+  "     [ ] 0. other — type your own answer",
+  "   space select · digits pick · 0 answer freely · type to filter · enter confirm",
+  "   · esc skip",
+]
+`;
+
+exports[`golden frames > renders a question gate collecting a typed answer at 40 columns 1`] = `
+[
+  "",
+  "? which deployment target?  (1/2)",
+  "    showing 1–2 of 9",
+  "     [ ] 1. staging-eu-west-1 — canary",
+  "            the rollout behind an audit",
+  "            window",
+  "     [ ] 2. production",
+  "   ❯ [x] 0. other — type your own answer",
+  "   ╭───────────────────────────────────╮",
+  "   │ the eu-central cluster            │",
+  "   ╰───────────────────────────────────╯",
+  "   type or paste an answer · enter",
+  "   confirm · ↑↓/ctrl+p/ctrl+n or esc",
+  "   back to options",
+]
+`;
+
+exports[`golden frames > renders a question gate collecting a typed answer at 80 columns 1`] = `
+[
+  "",
+  "? which deployment target?  (1/2)",
+  "    showing 1–2 of 9",
+  "     [ ] 1. staging-eu-west-1 — canary the rollout behind an audit window",
+  "     [ ] 2. production",
+  "   ❯ [x] 0. other — type your own answer",
+  "   ╭───────────────────────────────────────────────────────────────────────────╮",
+  "   │ the eu-central cluster                                                    │",
+  "   ╰───────────────────────────────────────────────────────────────────────────╯",
+  "   type or paste an answer · enter confirm · ↑↓/ctrl+p/ctrl+n or esc back to",
+  "   options",
+]
+`;
+
+exports[`golden frames > renders the dock at 40 columns 1`] = `
+[
+  "",
+  "⏸ plan mode · answer the plan before ed…",
+  "",
+  "┄┄ ☰ todos · 2 left ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
+  "  ▸ verify the dock",
+  "  ☐ document the dock",
+]
+`;
+
+exports[`golden frames > renders the dock at 80 columns 1`] = `
+[
+  "",
+  "⏸ plan mode · answer the plan before edits happen",
+  "",
+  "┄┄ ☰ todos · 2 left ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
+  "  ▸ verify the dock",
+  "  ☐ document the dock",
+]
+`;
+
+exports[`golden frames > renders the model picker at 80 columns 1`] = `
+{
+  "above": 0,
+  "below": 0,
+  "filter": "",
+  "hint": "↑/ctrl+p or ↓/ctrl+n move · enter switch · esc/ctrl+c cancel · type to filter",
+  "note": undefined,
+  "rows": [
+    {
+      "current": true,
+      "description": "kimi-coding · k2 · current · effort high",
+      "label": "K2",
+    },
+    {
+      "current": false,
+      "description": "opencode-go · qwen3-coder",
+      "label": "Qwen3 Coder",
+    },
+    {
+      "current": false,
+      "description": "zai-coding-cn · glm-5.3",
+      "label": "GLM 5.3",
+    },
+  ],
+  "title": "model · current kimi-coding/k2 (high)",
+}
+`;
+
+exports[`golden frames > renders the queued prompts at 40 columns 1`] = `
+[
+  "",
+  "│ also mention the queue in the summary ",
+  "",
+  "│ and keep the README sentence short,   ",
+  "│ with the same shape the bar above the ",
+  "│ editor draws                          ",
+]
+`;
+
+exports[`golden frames > renders the queued prompts at 80 columns 1`] = `
+[
+  "",
+  "│ also mention the queue in the summary                                         ",
+  "",
+  "│ and keep the README sentence short, with the same shape the bar above the     ",
+  "│ editor draws                                                                  ",
+]
+`;
+
+exports[`golden frames > renders the session picker at 80 columns 1`] = `
+{
+  "above": 0,
+  "below": 0,
+  "filter": "",
+  "hint": "↑/ctrl+p or ↓/ctrl+n move · enter open · esc/ctrl+c cancel · type to filter",
+  "note": undefined,
+  "rows": [
+    {
+      "current": true,
+      "description": "/Users/dev/source/opensource/deepseek-harness/master · 4m ago · 22 events",
+      "label": "dock polish",
+    },
+    {
+      "current": false,
+      "description": "/Users/dev/source/opensource/deepseek-harness/master · 15m ago · 41 events",
+      "label": "tui-session-f38b6841-9229-4c2f-8c82-0ced1eee68ea",
+    },
+  ],
+  "title": "resume a session · 2 stored",
+}
+`;
+
+exports[`golden frames > renders the stash picker at 80 columns 1`] = `
+{
+  "above": 0,
+  "below": 0,
+  "filter": "",
+  "hint": "↑/ctrl+p or ↓/ctrl+n move · enter pop · esc/ctrl+c cancel · type to filter",
+  "note": undefined,
+  "rows": [
+    {
+      "current": true,
+      "description": "1m ago",
+      "label": "[0] refactor the fold cursor so a resume replays it",
+    },
+    {
+      "current": false,
+      "description": "10m ago",
+      "label": "[1] why does the dock render twice on the first frame?",
+    },
+  ],
+  "title": "stash · tui-session-87c1e0d2 · 2 drafts",
+}
+`;
+
+exports[`golden frames > renders the status row at 40 columns 1`] = `
+[
+  "● ready · standard · zai-coding-cn/glm-…",
+]
+`;
+
+exports[`golden frames > renders the status row at 80 columns 1`] = `
+[
+  "● ready · standard · zai-coding-cn/glm-5.3 (max) · workspace-write · ctx 17.5k/…",
+]
+`;
+
+exports[`golden frames > renders the status row with parked drafts at 80 columns 1`] = `
+[
+  "● ready · standard · zai-coding-cn/glm-5.3 (max) · workspace-write · stash 3 · …",
+]
+`;
+
+exports[`golden frames > renders the transcript at 40 columns 1`] = `
+[
+  "",
+  "│ add a dock above the editor           ",
+  "",
+  "injected dsh-agent-instructions · 3",
+  "lines — <system-reminder>",
+  "",
+  "reasoning · 14 tokens (shift+tab)",
+  "",
+  "│ Done.                                 ",
+  "│                                       ",
+  "│ - fold the work state                 ",
+  "│ - render it only when it says         ",
+  "│   something                           ",
+  "│                                       ",
+  "│ \`\`\`ts                                 ",
+  "│   const dock = new WorkDock(state,    ",
+  "│ theme)                                ",
+  "│ \`\`\`                                   ",
+  "",
+  "bash pnpm test · exit 0 · 1 line",
+  "read src/…  L1–3 · 3 lines · 23 tok",
+  "compacted 3 events (≈4200 tokens)",
+]
+`;
+
+exports[`golden frames > renders the transcript at 80 columns 1`] = `
+[
+  "",
+  "│ add a dock above the editor                                                   ",
+  "",
+  "injected dsh-agent-instructions · 3 lines — <system-reminder>",
+  "",
+  "reasoning · 14 tokens (shift+tab)",
+  "",
+  "│ Done.                                                                         ",
+  "│                                                                               ",
+  "│ - fold the work state                                                         ",
+  "│ - render it only when it says something                                       ",
+  "│                                                                               ",
+  "│ \`\`\`ts                                                                         ",
+  "│   const dock = new WorkDock(state, theme)                                     ",
+  "│ \`\`\`                                                                           ",
+  "",
+  "bash pnpm test · exit 0 · 1 line",
+  "read src/ui/view.ts  L1–3 · 3 lines · 23 tok",
+  "compacted 3 events (≈4200 tokens)",
+]
+`;
+
+exports[`markdown messages > renders a prompt and a thought as markdown at 40 columns 1`] = `
+[
+  "",
+  "│ summarize this:                       ",
+  "│                                       ",
+  "│ - first item                          ",
+  "│ - second item                         ",
+  "│                                       ",
+  "│ \`\`\`ts                                 ",
+  "│   const x = 1                         ",
+  "│ \`\`\`                                   ",
+  "",
+  "reasoning · 15 tokens",
+  "    weigh the options",
+  "",
+  "    1. keep the parser",
+  "    2. drop the cache",
+  "",
+  "│ Kept the parser.                      ",
+  "",
+]
+`;
+
+exports[`markdown messages > renders a prompt and a thought as markdown at 80 columns 1`] = `
+[
+  "",
+  "│ summarize this:                                                               ",
+  "│                                                                               ",
+  "│ - first item                                                                  ",
+  "│ - second item                                                                 ",
+  "│                                                                               ",
+  "│ \`\`\`ts                                                                         ",
+  "│   const x = 1                                                                 ",
+  "│ \`\`\`                                                                           ",
+  "",
+  "reasoning · 15 tokens",
+  "    weigh the options",
+  "",
+  "    1. keep the parser",
+  "    2. drop the cache",
+  "",
+  "│ Kept the parser.                                                              ",
+  "",
+]
+`;

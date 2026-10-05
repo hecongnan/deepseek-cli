@@ -1,0 +1,157 @@
+/**
+ * The state decision, without any transport.
+ *
+ * Keeping this apart from the socket is what makes the mapping testable: the
+ * surface knows facts about itself, Herdr wants one of three words, and the
+ * translation between them is the part worth pinning down.
+ */
+
+import {
+  HERDR_STATES,
+  MAX_BLOCKED_MESSAGE_CHARS,
+  MAX_STATE_LABEL_CHARS,
+  SEQ_TIME_SCALE,
+  SESSION_START_REASONS,
+  type HerdrState,
+  type SessionStartReason,
+} from './constants.ts'
+
+/** How the surface opened the session it is now showing. */
+export interface SessionStartFacts {
+  readonly forked: boolean
+  readonly resumed: boolean
+}
+/**
+ * The harness driver lifecycle this surface reports on.
+ *
+ * Mirrors the harness AgentStatus by value rather than by import so the
+ * Herdr wire stays a transport-only module; a running driver spans every
+ * turn it chains through a pending inbox, which is exactly why the report
+ * follows it instead of a turn boundary.
+ */
+export type DriverStatus = 'idle' | 'running'
+
+/**
+ * The driver status an agent/status payload carries, when it carries one
+ * this surface knows.
+ *
+ * The event is listened to through a loose name so a harness rename cannot
+ * break compilation, which leaves the payload untyped at the listener; the
+ * vocabulary is decided here rather than at the call site so an unknown
+ * future status is dropped instead of guessed at.
+ */
+function asDriverStatus(value: unknown): DriverStatus | undefined {
+  return value === 'idle' || value === 'running' ? value : undefined
+}
+
+/**
+ * The driver status a live agent/status payload reports for one session.
+ *
+ * The whole listener decision lives here rather than in the wiring so the
+ * guard that matters can be pinned by a test. Two filters apply, and both
+ * are load-bearing: subagents share this process and dispatch their own
+ * status, so a payload for another agent must not move this pane's row, and
+ * an unknown status must be dropped rather than guessed at. Returning
+ * undefined is also how a turn boundary reads — it carries no agent/status
+ * at all, which is why a chained turn inside one run cannot flap the row.
+ */
+export function driverReportFor(payload: unknown, sessionId: string): DriverStatus | undefined {
+  const record = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : undefined
+  const agent = record?.agent
+  const agentId = typeof agent === 'object' && agent !== null ? (agent as Record<string, unknown>).id : undefined
+  // Identity first: a subagent's status is not this pane's work, and only the
+  // driven session's own transitions may be reported.
+  if (typeof agentId !== 'string' || agentId !== sessionId) return undefined
+  return asDriverStatus(record?.status)
+}
+
+/** What the surface knows about itself. */
+export interface LifecycleFacts {
+  /** How many decisions are waiting on the reader; they can stack. */
+  readonly blockedCount: number
+  readonly blockedMessage: string | undefined
+  readonly driverRunning: boolean
+  readonly backgroundRunning: boolean
+}
+
+export interface LifecycleReport {
+  readonly state: HerdrState
+  readonly message: string | undefined
+}
+
+/**
+ * The state Herdr should show.
+ *
+ * A wait outranks a running driver because an agent that is waiting on a
+ * human is not making progress, and the wait is the only thing a reader
+ * glancing at a wall of panes can still act on.
+ */
+export function lifecycleReport(facts: LifecycleFacts): LifecycleReport {
+  if (facts.blockedCount > 0) return { state: HERDR_STATES.blocked, message: facts.blockedMessage }
+  if (facts.driverRunning || facts.backgroundRunning) return { state: HERDR_STATES.working, message: undefined }
+  return { state: HERDR_STATES.idle, message: undefined }
+}
+
+/**
+ * The message that names a wait, bounded.
+ *
+ * A title long enough to be cut still tells the reader which decision is
+ * pending, which is the only job the message has.
+ */
+export function boundedMessage(message: string): string {
+  return bounded(message, MAX_BLOCKED_MESSAGE_CHARS)
+}
+
+/**
+ * What Herdr can render for the row's state.
+ *
+ * A wait's title reaches Herdr as a message, and 0.9.1 stores that message
+ * without drawing it anywhere, so the same text is offered again as the blocked
+ * state's display label — the one its sidebar's `state_text` token reads. A row
+ * that is not blocked has no decision to name.
+ */
+export function stateLabelFor(report: LifecycleReport): string | undefined {
+  if (report.state !== HERDR_STATES.blocked || report.message === undefined) return undefined
+  return bounded(report.message, MAX_STATE_LABEL_CHARS)
+}
+
+/** One line of text, cut where this surface decides rather than where Herdr does. */
+function bounded(text: string, limit: number): string {
+  const trimmed = text.replace(/\s+/gu, ' ').trim()
+  return trimmed.length <= limit ? trimmed : `${trimmed.slice(0, limit - 1)}…`
+}
+
+/**
+ * The reason Herdr is told a session opened.
+ *
+ * A fork and a resume are different acts to a reader scanning panes later: one
+ * inherited a conversation, the other returned to it.
+ */
+export function sessionStartReason(input: SessionStartFacts): SessionStartReason {
+  if (input.forked) return SESSION_START_REASONS.fork
+  return input.resumed ? SESSION_START_REASONS.resume : SESSION_START_REASONS.startup
+}
+
+/** Whether a report would say something Herdr is not already showing. */
+export function isReportChange(last: LifecycleReport | undefined, next: LifecycleReport): boolean {
+  return last === undefined || last.state !== next.state || last.message !== next.message
+}
+
+/**
+ * Monotonic report sequence numbers, anchored at the moment each one goes out.
+ *
+ * Herdr keeps the newest number filed per source and drops anything older, so a
+ * number tied to the moment this process started loses to every report a later
+ * process made: a surface that stays up across a multiplexer restart, or across
+ * another process claiming and releasing the same pane, would never win its own
+ * row back. Reading the clock at each call fixes that, and the running maximum
+ * keeps numbers moving forward anyway — a clock that steps backwards must not
+ * hand Herdr a number it has already seen.
+ */
+export function createReportSequence(now: () => number): () => number {
+  let sequence = 0
+  return () => {
+    sequence = Math.max(sequence + 1, now() * SEQ_TIME_SCALE)
+    return sequence
+  }
+}

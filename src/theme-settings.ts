@@ -1,0 +1,453 @@
+import type { KeyId } from '@earendil-works/pi-tui'
+import z from '@deepseek-ai/schemastery'
+import type {} from '@deepseek-ai/dsh-settings'
+import { DEFAULT_MAX_ENTRIES, MAX_ENTRIES_LIMIT } from './agent/prompt-history.ts'
+import { defaultKeymap, keysFor, resolveKeymap, type KeyListValue, type Keymap } from './input/actions.ts'
+import { KeymapSectionSchema, isActionId } from './input/keymap-settings.ts'
+import { DEFAULT_PREFIX_KEYS, DEFAULT_PREFIX_WINDOW_S } from './input/keymap.ts'
+import {
+  TOOL_DISPLAY_LIMITS,
+  TOOL_OUTPUT_DISPLAYS,
+  toolDisplayTable,
+  type ToolDisplayTable,
+  type ToolOutputDisplay,
+  type WrittenToolDisplay,
+} from './tool-display.ts'
+import { DEFAULT_THEME, type LoadedTheme, type ThemeLibrary } from './theme-files.ts'
+import {
+  asRecord,
+  PALETTE_NAME_SET,
+  PaletteSchema,
+  TOKEN_NAME_SET,
+  TokensSchema,
+} from './theme-schema.ts'
+import { DEFAULT_SPACING, parseSpacing, type Spacing } from './spacing.ts'
+import { DEFAULT_PALETTE } from './theme-defaults.ts'
+import type { PaletteName, StyleSpec, ThemedSpecs, TuiToken } from './theme-tokens.ts'
+
+/** Settings namespace owned by the terminal surface. */
+export const TUI_SETTINGS_NAMESPACE = 'dsh-tui'
+
+/** How nested PTC calls draw: nothing beyond the card, or one indented line per dispatched call. */
+export type SubCallDisplay = 'collapsed' | 'inline'
+
+/** The values the `subcalls` key accepts, declared once for the schema and the refusal message. */
+const SUBCALL_DISPLAYS = ['collapsed', 'inline'] as const
+
+/**
+ * The shipped display: a program's calls stay behind its card until asked for.
+ *
+ * A program can dispatch hundreds of calls, and a reader who meets one for the
+ * first time met a wall of lines rather than the answer; the rows are one click
+ * on the card's header, or the nested-calls key, away.
+ */
+const DEFAULT_SUBCALL_DISPLAY: SubCallDisplay = 'collapsed'
+
+/** How a reply's mermaid fences draw: never, once settled, or as the reply streams. */
+export const MERMAID_MODES = ['off', 'final', 'streaming'] as const
+export type MermaidMode = (typeof MERMAID_MODES)[number]
+
+/** The shipped mode: a diagram draws itself while the reply arrives, without waiting for the turn. */
+const DEFAULT_MERMAID_MODE: MermaidMode = 'streaming'
+
+/** Longest chord window a reader may ask for, so a typo cannot arm one for an hour. */
+const MAX_PREFIX_WINDOW_S = 60
+
+/** Prompt history is on, and offers the dimmed completion, until the reader says otherwise. */
+const DEFAULT_HISTORY_ENABLED = true
+const DEFAULT_HISTORY_GHOST = true
+
+/** The history keys, declared once so a typo is refused by name. */
+const HISTORY_KEYS = new Set(['enabled', 'ghost', 'maxEntries'])
+
+/**
+ * The prompt-history affordances.
+ *
+ * Grouped under one key because they are tuned together: a reader who wants no
+ * ghost still keeps reverse search, and one who wants neither stops the store.
+ */
+const HistorySchema = z.object({
+  enabled: z.boolean().default(DEFAULT_HISTORY_ENABLED),
+  ghost: z.boolean().default(DEFAULT_HISTORY_GHOST),
+  maxEntries: z.number().min(1).max(MAX_ENTRIES_LIMIT).default(DEFAULT_MAX_ENTRIES),
+})
+
+const SECTION = z.object({
+  // No default even though the surface draws one, for the same reason `prefix`
+  // has none: a registration fills every declared field, and a fill-in here would
+  // hand back a choice the reader never made, which the next save would then write
+  // into their document as if they had. Which theme answers an unnamed section is
+  // the library's question, asked where the name is looked up. A free string
+  // rather than an enumerated union, also for the same reason as `prefix`: the
+  // names are files the reader owns, and one appears the moment they save it —
+  // which no schema compiled into this build can enumerate. A name nothing answers
+  // to is refused where the names that do answer can actually be listed.
+  theme: z.string(),
+  palette: PaletteSchema.default({}),
+  tokens: TokensSchema.default({}),
+  subcalls: z.union([...SUBCALL_DISPLAYS]).default(DEFAULT_SUBCALL_DISPLAY),
+  mermaid: z.union([...MERMAID_MODES]).default(DEFAULT_MERMAID_MODE),
+  // A free string rather than an enumerated union: the keymap module owns which
+  // keys exist, and its refusal is the message a reader can act on.
+  //
+  // No default, unlike the fields around it: a registration fills every declared
+  // field, so a default here would hand back the old spelling as written and the
+  // reader's own keys.chord.prefix would read as a second spelling of it.
+  prefix: z.string(),
+  prefixWindow: z.number().min(0).max(MAX_PREFIX_WINDOW_S).default(DEFAULT_PREFIX_WINDOW_S),
+  keys: KeymapSectionSchema.default({}),
+  history: HistorySchema.default({ enabled: DEFAULT_HISTORY_ENABLED, ghost: DEFAULT_HISTORY_GHOST, maxEntries: DEFAULT_MAX_ENTRIES }),
+  // Declared so a registered scope keeps the block when the document is saved,
+  // but validated by hand below: its keys are tool names, which no closed shape
+  // can enumerate, and schemastery's `dict` accepts every one of them.
+  tools: z.any(),
+  // Declared for the same reason `tools` is, and validated by hand below: the block
+  // is a mapping of counts whose fields are spelled out where the refusal is.
+  spacing: z.any(),
+})
+
+/**
+ * The schema the harness registers.
+ *
+ * Exported alongside the parser because registration needs a real schemastery
+ * schema, while reading needs the unknown-token check that a schemastery object
+ * cannot express.
+ */
+export const TuiSettingsSchema = SECTION
+
+/** The section's own keys: schemastery keeps what it does not declare, so a misspelling has to be refused here. */
+const SECTION_KEYS = new Set(['theme', 'palette', 'tokens', 'subcalls', 'mermaid', 'prefix', 'prefixWindow', 'keys', 'history', 'tools', 'spacing'])
+
+/** The fields one tool's row may carry, for the same reason the section's own keys are spelled out. */
+const TOOL_FIELDS = new Set(['collapsed', 'output', 'tail'])
+
+/**
+ * Validate the raw section, refusing a name the surface does not have.
+ *
+ * Schemastery's object schema ignores undeclared keys, so a misspelled token,
+ * palette entry, or key would otherwise parse cleanly and do nothing at all —
+ * the one outcome a reader could not debug from the screen. Every level is
+ * therefore checked against its declared names before validation.
+ */
+function rejectUnknownKeys(raw: unknown): void {
+  const section = asRecord(raw)
+  if (section === undefined) return
+  const unknownKeys = Object.keys(section).filter(name => !SECTION_KEYS.has(name))
+  if (unknownKeys.length > 0) {
+    throw new Error(`unknown ${TUI_SETTINGS_NAMESPACE} key${unknownKeys.length === 1 ? '' : 's'}: ${unknownKeys.join(', ')}`)
+  }
+  const unknownTokens = Object.keys(asRecord(section.tokens) ?? {}).filter(name => !TOKEN_NAME_SET.has(name))
+  if (unknownTokens.length > 0) {
+    throw new Error(`unknown ${TUI_SETTINGS_NAMESPACE} token${unknownTokens.length === 1 ? '' : 's'}: ${unknownTokens.join(', ')}`)
+  }
+  const unknownPalette = Object.keys(asRecord(section.palette) ?? {}).filter(name => !PALETTE_NAME_SET.has(name))
+  if (unknownPalette.length > 0) {
+    throw new Error(`unknown ${TUI_SETTINGS_NAMESPACE} palette entr${unknownPalette.length === 1 ? 'y' : 'ies'}: ${unknownPalette.join(', ')}`)
+  }
+  const unknownActions = Object.keys(asRecord(section.keys) ?? {}).filter(name => !isActionId(name))
+  if (unknownActions.length > 0) {
+    throw new Error(`unknown ${TUI_SETTINGS_NAMESPACE} key action${unknownActions.length === 1 ? '' : 's'}: ${unknownActions.join(', ')}`)
+  }
+  const unknownHistory = Object.keys(asRecord(section.history) ?? {}).filter(name => !HISTORY_KEYS.has(name))
+  if (unknownHistory.length > 0) {
+    throw new Error('unknown ' + TUI_SETTINGS_NAMESPACE + ' history key' + (unknownHistory.length === 1 ? '' : 's') + ': ' + unknownHistory.join(', '))
+  }
+  const unknownToolFields = Object.entries(asRecord(section.tools) ?? {})
+    .flatMap(([tool, spec]) => Object.keys(asRecord(spec) ?? {})
+      .filter(field => !TOOL_FIELDS.has(field))
+      .map(field => `${tool}.${field}`))
+  if (unknownToolFields.length > 0) {
+    throw new Error('unknown ' + TUI_SETTINGS_NAMESPACE + ' tool field' + (unknownToolFields.length === 1 ? '' : 's') + ': ' + unknownToolFields.join(', '))
+  }
+}
+
+/** One display flag as the reader wrote it. */
+function toolFlag(value: unknown, field: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`${field} must be a boolean`)
+  return value
+}
+
+/** One bounded count as the reader wrote it. */
+function toolInteger(value: unknown, field: string, bounds: { readonly min: number; readonly max: number }): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < bounds.min || value > bounds.max) {
+    throw new Error(`${field} must be an integer between ${bounds.min} and ${bounds.max}`)
+  }
+  return value
+}
+
+/** One `output` value as the reader wrote it. */
+function toolOutput(value: unknown, field: string): ToolOutputDisplay {
+  if (typeof value !== 'string' || !(TOOL_OUTPUT_DISPLAYS as readonly string[]).includes(value)) {
+    throw new Error(`${field} must be one of: ${TOOL_OUTPUT_DISPLAYS.join(', ')}`)
+  }
+  return value as ToolOutputDisplay
+}
+
+/**
+ * The `tools:` block as the reader wrote it.
+ *
+ * The reserved `default` row and every tool name are the same shape, so they
+ * are validated the same way; a name nothing declares is inert rather than an
+ * error, because the surface cannot know which tools a profile mounts.
+ */
+function parseTools(raw: unknown): Record<string, WrittenToolDisplay> {
+  if (raw !== undefined && asRecord(raw) === undefined) throw new Error('tools must be a mapping of display fields')
+  const block = asRecord(raw) ?? {}
+  const specs: Record<string, WrittenToolDisplay> = {}
+  for (const [tool, value] of Object.entries(block)) {
+    const spec = asRecord(value)
+    if (spec === undefined) throw new Error(`tools.${tool} must be a mapping of display fields`)
+    const written: WrittenToolDisplay = {}
+    if (spec.collapsed !== undefined) written.collapsed = toolFlag(spec.collapsed, `tools.${tool}.collapsed`)
+    if (spec.output !== undefined) written.output = toolOutput(spec.output, `tools.${tool}.output`)
+    if (spec.tail !== undefined) written.tail = toolInteger(spec.tail, `tools.${tool}.tail`, TOOL_DISPLAY_LIMITS.tail)
+    specs[tool] = written
+  }
+  return specs
+}
+
+/** The reader-facing shape of the `dsh-tui:` section. */
+export function parseSettings(raw: unknown): TuiSettings {
+  if (asRecord(raw) === undefined) throw new Error('dsh-tui settings must be a mapping')
+  rejectUnknownKeys(raw)
+  const section = asRecord(raw)!
+  if (section.history !== undefined && asRecord(section.history) === undefined) throw new Error('history must be a mapping')
+  const parsed = SECTION(section) as unknown as {
+    theme: string | undefined
+    palette: Record<PaletteName, string>
+    tokens: Record<string, StyleSpec>
+    subcalls: SubCallDisplay
+    mermaid: MermaidMode
+    prefix: string
+    prefixWindow: number
+    keys: Record<string, KeyListValue>
+    history: HistorySettings
+  }
+  // Only what the reader actually wrote is an override: the schema fills every
+  // field so validation can see a whole section, but returning those fills
+  // would turn a one-line override into a table of empty entries.
+  const writtenPalette = asRecord(section.palette) ?? {}
+  const palette: Record<string, string> = {}
+  for (const [name, value] of Object.entries(writtenPalette)) {
+    // Same fill-in problem as the tokens: the schema supplies a default for
+    // every entry, so only a value the reader chose is an override.
+    if (value === undefined || value === DEFAULT_PALETTE[name as PaletteName]) continue
+    palette[name] = parsed.palette[name as PaletteName]
+  }
+  const writtenTokens = asRecord(section.tokens) ?? {}
+  const tokens: Record<string, StyleSpec> = {}
+  for (const [name, value] of Object.entries(writtenTokens)) {
+    // A registered scope hands back every key the schema declares, with an
+    // empty spec for the ones nobody wrote. An empty spec cannot change an
+    // appearance, so keeping it would let the schema's own fill-in shadow the
+    // shipped default and report every element as overridden.
+    if (value === undefined || !hasAnyField(parsed.tokens[name])) continue
+    tokens[name] = parsed.tokens[name] ?? {}
+  }
+  const writtenKeys = asRecord(section.keys) ?? {}
+  // The old spelling and the map set the same key; accepting both would make
+  // the document mean two things at once.
+  if (section.prefix !== undefined && writtenKeys['chord.prefix'] !== undefined) {
+    throw new Error('prefix and keys.chord.prefix set the same key; write keys.chord.prefix alone')
+  }
+  // Only what the reader wrote reaches the map: the schema fills every action so
+  // validation can see a whole section, and a fill-in would report every action
+  // as overridden.
+  const overrides: Record<string, KeyListValue> = {}
+  for (const [id, value] of Object.entries(parsed.keys)) {
+    if (value !== undefined) overrides[id] = value
+  }
+  if (parsed.prefix !== undefined) overrides['chord.prefix'] = parsed.prefix
+  // Validated here rather than in the schema because every refusal depends on
+  // the catalog and on the layers the map already claims, which a schema cannot see.
+  const keymap = resolveKeymap(overrides)
+  return {
+    theme: parsed.theme,
+    palette: palette as Readonly<Partial<Record<PaletteName, string>>>,
+    tokens: tokens as Readonly<Partial<Record<TuiToken, StyleSpec>>>,
+    subcalls: parsed.subcalls,
+    tools: toolDisplayTable(parseTools(section.tools)),
+    spacing: parseSpacing(section.spacing),
+    mermaid: parsed.mermaid,
+    prefixes: keysFor(keymap, 'chord.prefix'),
+    prefixWindow: parsed.prefixWindow,
+    keymap,
+    history: parsed.history,
+  }
+}
+
+/** Whether a resolved spec actually asks for anything. */
+function hasAnyField(spec: StyleSpec | undefined): boolean {
+  if (spec === undefined) return false
+  return Object.values(spec).some(value => value !== undefined)
+}
+
+/** The prompt-history affordances and the size the reader allows. */
+export interface HistorySettings {
+  /** Whether prompts are recorded and offered at all. */
+  readonly enabled: boolean
+  /** Whether the dimmed completion is drawn; reverse search is unaffected. */
+  readonly ghost: boolean
+  /** Entries kept, newest first. */
+  readonly maxEntries: number
+}
+
+/** What the section holds once parsed: only what the reader wrote. */
+export interface TuiSettings {
+  /** The theme the reader named, or nothing to draw the package's own. */
+  readonly theme: string | undefined
+  readonly palette: Readonly<Partial<Record<PaletteName, string>>>
+  readonly tokens: Readonly<Partial<Record<TuiToken, StyleSpec>>>
+  readonly subcalls: SubCallDisplay
+  readonly mermaid: MermaidMode
+  /** The keys that start a chord; a key the surface answers itself is refused at parse. */
+  readonly prefixes: readonly KeyId[]
+  /** How long an armed chord waits for its second key, in seconds; zero waits for the next key. */
+  readonly prefixWindow: number
+  /** Every action's keys, with the reader's overrides already merged over the shipped ones. */
+  readonly keymap: Keymap
+  /** The prompt-history affordances, grouped so one key tunes them together. */
+  readonly history: HistorySettings
+  /** How each tool's cards draw: the block's own default, then the reader's per-tool rows. */
+  readonly tools: ToolDisplayTable
+  /** How much air the surface keeps: its own edges, and the gaps between what it draws. */
+  readonly spacing: Spacing
+}
+
+/** The section as it reads when the reader has written nothing. */
+export function defaultSettings(): TuiSettings {
+  return {
+    theme: undefined,
+    palette: {},
+    tokens: {},
+    subcalls: DEFAULT_SUBCALL_DISPLAY,
+    tools: toolDisplayTable(),
+    spacing: DEFAULT_SPACING,
+    mermaid: DEFAULT_MERMAID_MODE,
+    prefixes: [...DEFAULT_PREFIX_KEYS],
+    prefixWindow: DEFAULT_PREFIX_WINDOW_S,
+    keymap: defaultKeymap(),
+    history: { enabled: DEFAULT_HISTORY_ENABLED, ghost: DEFAULT_HISTORY_GHOST, maxEntries: DEFAULT_MAX_ENTRIES },
+  }
+}
+
+/** The theme inputs a parsed section implies. */
+export interface ThemeOverrides {
+  /** The shades in force: the shipped palette, then a theme's, then the reader's. */
+  readonly palette: Readonly<Record<PaletteName, string>>
+  /** Every element the reader drew themselves; a theme is a layer apart from this. */
+  readonly tokens: ReadonlyMap<TuiToken, StyleSpec>
+  /**
+   * The theme in force, when one answers to the name the reader wrote.
+   *
+   * Carried whole rather than folded into the layers above, because the layers
+   * answer differently: a theme moves every element it names, while a reader's
+   * field wins over it one at a time — and `/theme` reports which of the two a
+   * shade came from, which needs the file it came out of.
+   */
+  readonly theme?: LoadedTheme | undefined
+}
+
+/**
+ * The layer the theme in force contributes, or nothing when no file answered.
+ *
+ * The table every theme is written against is the compiled one, so a theme is
+ * always a layer over it and never a replacement: an element no theme names keeps
+ * the shade the surface ships with.
+ */
+export function themeLayer(overrides: ThemeOverrides): ThemedSpecs | undefined {
+  return overrides.theme?.tokens
+}
+
+/**
+ * One sentence for a section the surface refused.
+ *
+ * Shared by the stderr fallback and the reader-facing notice so a refusal the
+ * schema makes at registration and one the parser makes on a read read alike.
+ */
+export function settingsProblemMessage(error: unknown): string {
+  return `ignoring ${TUI_SETTINGS_NAMESPACE} settings: ${error instanceof Error ? error.message : String(error)}`
+}
+
+/**
+ * Read a registered scope's section, or nothing when it cannot be read.
+ *
+ * A malformed candidate must not replace a working appearance or erase an
+ * opt-out. Startup has no previous appearance, so only then do shipped defaults
+ * supply the fallback. Notices stay visible above the alternate screen.
+ */
+export function readScope(scope: { get(): unknown }, onProblem?: (message: string) => void, previous?: TuiSettings): TuiSettings {
+  let raw: unknown = undefined
+  try {
+    raw = scope.get()
+    return parseSettings(raw)
+  } catch (error) {
+    const message = settingsProblemMessage(error)
+    if (onProblem === undefined) process.stderr.write(`dsh-tui: ${message}\n`)
+    else onProblem(message)
+    // Last-good appearance and readable opt-outs survive a rejected candidate;
+    // a switch that cannot be read must never authorize recording.
+    const fallback = previous ?? defaultSettings()
+    const history = salvageHistory(raw)
+    // A rejected candidate cannot revoke an already applied opt-out.
+    return { ...fallback, history: {
+      ...history,
+      enabled: previous?.history.enabled === false ? false : history.enabled,
+      ghost: previous?.history.ghost === false ? false : history.ghost,
+    } }
+  }
+}
+
+/**
+ * The history block as far as it can be read from a refused section.
+ *
+ * Only the primitive shapes the schema would have accepted are taken; missing
+ * and malformed fields fall back to the shipped value, except an unreadable
+ * `enabled`, which refuses.
+ */
+function salvageHistory(raw: unknown): HistorySettings {
+  const fallback = defaultSettings().history
+  const history = asRecord(asRecord(raw)?.history)
+  if (history === undefined) return asRecord(raw) !== undefined && asRecord(raw)!.history === undefined
+    ? fallback
+    : { ...fallback, enabled: false, ghost: false }
+  const enabled = history.enabled === undefined
+    ? fallback.enabled
+    : typeof history.enabled === 'boolean' ? history.enabled : false
+  const ghost = history.ghost === undefined ? fallback.ghost : typeof history.ghost === 'boolean' ? history.ghost : false
+  const maxEntries = typeof history.maxEntries === 'number'
+    && Number.isSafeInteger(history.maxEntries)
+    && history.maxEntries >= 1
+    && history.maxEntries <= MAX_ENTRIES_LIMIT
+    ? history.maxEntries
+    : fallback.maxEntries
+  return { enabled, ghost, maxEntries }
+}
+
+/**
+ * Turn a parsed section into the inputs the resolver takes.
+ *
+ * Shipped defaults fill anything the reader left out, so a partial section is
+ * the normal case rather than something the resolver has to guard against.
+ *
+ * The name is looked up rather than trusted: a reader can rename or rewrite the
+ * file behind it between two reads, and a theme that is gone leaves the package's
+ * own in force rather than leaving the surface with nothing to draw.
+ */
+export function toOverrides(settings: TuiSettings, library: ThemeLibrary): ThemeOverrides {
+  // An unnamed section and an unknown name land on the same answer: the theme the
+  // package draws by default. The unknown name is reported beside this read, so
+  // the reader hears which name stopped answering rather than guessing from shades.
+  const theme = library.get(settings.theme) ?? library.get(DEFAULT_THEME)
+  const tokens = new Map<TuiToken, StyleSpec>()
+  for (const [token, spec] of Object.entries(settings.tokens)) {
+    if (spec !== undefined) tokens.set(token as TuiToken, spec)
+  }
+  // The theme travels as its own layer rather than folded in here, so a reader's
+  // field merges over it one element at a time instead of replacing it.
+  return {
+    palette: { ...DEFAULT_PALETTE, ...theme?.palette, ...settings.palette },
+    tokens,
+    theme,
+  }
+}

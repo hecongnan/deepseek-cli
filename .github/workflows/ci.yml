@@ -1,0 +1,54 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to commit SHAs so a moved tag cannot change what runs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 11
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # Registry signatures and publish attestations for the whole tree: an
+      # unsigned or tampered dependency fails here, before anything ships.
+      - name: Dependency signatures
+        run: npm audit signatures
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit and golden tests
+        run: pnpm test
+      # The release guard suite runs on every change because a regression here
+      # would first surface as an unrecoverable registry write.
+      - name: Release helper tests
+        run: pnpm test:release
+      # Full-profile dogfood remains local; CI also guards native widget/input and restore invariants without credentials.
+      - name: Package smoke
+        run: node tools/pack-smoke.mjs
+      # Timing varies across hosts; only key preservation, redraw and restore invariants gate shared runners.
+      - name: Native terminal behavior
+        run: pnpm test:terminal
+      # The manifest and the tree it describes must name the same harness
+      # release; the registry half of this check runs on schedule.
+      - name: Harness matrix
+        run: node tools/harness-matrix.mjs
+      # Resolution failures happen in the consumer's tree, not this one: install
+      # the packed artefact with npm and as a plugin profile inside the image a
+      # consumer is most likely to have.
+      - name: Consumer install smoke
+        run: node tools/install-smoke.mjs

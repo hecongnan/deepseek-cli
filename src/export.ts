@@ -1,0 +1,151 @@
+import { mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
+import path from 'node:path'
+import { rowText } from './cards.ts'
+import { dshHomeDir } from './stash/paths.ts'
+import { renderTerminalText } from './terminal-text.ts'
+import type { TranscriptEntry } from './transcript.ts'
+
+/**
+ * A fragment as a document holds it.
+ *
+ * A file has no terminal to style it, so nothing is coloured; and a sequence is
+ * consumed rather than printed as the bytes that produced it, because the dump
+ * is meant to be read. A line feed survives, since markdown is made of lines.
+ */
+function documentText(raw: string): string {
+  return renderTerminalText(raw, { color: 'none' })
+}
+
+/** The directory under the harness home a dump with no destination lands in. */
+export const EXPORTS_DIR_NAME = 'exports'
+
+/**
+ * Where a dump with no destination is written.
+ *
+ * A directory of its own rather than the theme one beside it: `$DSH_HOME/themes`
+ * belongs to `/theme export` and the surface watches it for edits, so a
+ * dump written there would sit among the reader's themes and be re-read as one.
+ */
+export function exportsHomeDir(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
+  return path.join(dshHomeDir(env, home), EXPORTS_DIR_NAME)
+}
+
+/** Create the exports directory if it is missing; empty when it is there. */
+export function ensureExportsHome(dir: string): readonly string[] {
+  try {
+    mkdirSync(dir, { recursive: true })
+    return []
+  } catch (error) {
+    return [`exports: cannot create ${dir}: ${message(error)}`]
+  }
+}
+
+/** One sentence out of an error, for a notice that has one line. */
+function message(error: unknown): string {
+  return error instanceof Error ? error.message.split('\n')[0] ?? String(error) : String(error)
+}
+
+/** Directory-relative default the reader can find without being told. */
+export const DEFAULT_EXPORT_PREFIX = 'dsh-session'
+
+/** How the dump marks a nested call that returned an error, which the screen carried as colour. */
+const SUBCALL_FAILED_SUFFIX = ' (failed)'
+
+/** Id characters kept in a file name, so a session id cannot escape the directory. */
+const UNSAFE_NAME = /[^A-Za-z0-9._-]/gu
+
+/** The shortest code fence; a longer backtick run in the body needs a longer one. */
+const MIN_FENCE = 3
+const BACKTICK_RUN = /`+/gu
+/** A comment body must not close the comment that carries it. */
+const COMMENT_CLOSE = '-->'
+const COMMENT_CLOSE_DEFUSED = '--&gt;'
+
+/** Default file for a dump: the session's own name, in the working directory. */
+export function defaultExportFile(sessionId: string): string {
+  return `${DEFAULT_EXPORT_PREFIX}-${sessionId.replace(UNSAFE_NAME, '_')}.md`
+}
+
+/**
+ * A fence the body cannot close early.
+ *
+ * Tool output and thinking are arbitrary text, and a run of three backticks in
+ * either would end the block and spill the rest into the document as prose.
+ */
+function fenceFor(text: string): string {
+  let longest = 0
+  for (const run of text.match(BACKTICK_RUN) ?? []) longest = Math.max(longest, run.length)
+  return '`'.repeat(Math.max(MIN_FENCE, longest + 1))
+}
+
+/** Comment text with any closing marker defused, so the comment stays one. */
+function commentBody(text: string): string {
+  return documentText(text).replaceAll(COMMENT_CLOSE, COMMENT_CLOSE_DEFUSED)
+}
+
+/**
+ * Render the visible transcript as markdown.
+ *
+ * The dump outlives the screen it came from, so each row is given the markdown
+ * construct that carries its meaning rather than whichever mark the surface
+ * happened to draw, and every fragment is drawn the way the screen drew it only
+ * without colour: the file may be opened in a terminal, so it must not carry a
+ * sequence that terminal would obey.
+ */
+export function transcriptToText(entries: readonly TranscriptEntry[]): string {
+  const lines: string[] = []
+  for (const entry of entries) {
+    switch (entry.kind) {
+      case 'user':
+        lines.push('', `> ${documentText(entry.text).replace(/\n/gu, '\n> ')}`)
+        break
+      case 'assistant':
+        lines.push('', documentText(entry.text))
+        break
+      case 'notice':
+        lines.push('', `<!-- ${commentBody(entry.text)} -->`)
+        break
+      case 'marker':
+        lines.push('', `--- ${documentText(entry.text)} ---`)
+        break
+      case 'reasoning': {
+        // The thought is on screen now, so it belongs in the dump; only the
+        // count is metadata, and the body is the part a reader came for.
+        const body = entry.body.split('\n').map(line => documentText(line))
+        const fence = fenceFor(body.join('\n'))
+        lines.push('', `<!-- ${commentBody(entry.summary)} -->`, `${fence}reasoning`)
+        lines.push(...body)
+        lines.push(fence)
+        break
+      }
+      case 'tool': {
+        const mark = entry.card.failed ? 'ERROR' : 'tool'
+        // The dump is the words, not the screen: row classes exist so the
+        // surface can style a line, and a file has no use for them.
+        const rows = entry.card.detail.map(row => documentText(rowText(row)))
+        const more = entry.card.totalLines > entry.card.detail.length
+          ? `… ${entry.card.totalLines - entry.card.detail.length} more lines`
+          : undefined
+        const head = [entry.card.title, entry.card.skill].filter(part => part !== undefined && part !== '').join(' ')
+        const fence = fenceFor([documentText(head), ...rows, more ?? ''].join('\n'))
+        lines.push('', `### ${mark}: ${documentText(head)}`)
+        // The calls are what the reader saw under the card, so a dump that
+        // dropped them would lose the only record of what the program reached.
+        const subCalls = entry.card.subCalls ?? []
+        for (const call of subCalls) {
+          const text = [call.title, call.skill, call.argument].filter(part => part !== undefined && part !== '').join(' ')
+          lines.push(`- ${documentText(text)}${call.failed ? SUBCALL_FAILED_SUFFIX : ''}`)
+        }
+        const dropped = (entry.card.subCallsTotal ?? subCalls.length) - subCalls.length
+        if (dropped > 0) lines.push(`- … ${dropped} more calls`)
+        lines.push('', fence)
+        lines.push(...rows)
+        if (more !== undefined) lines.push(more)
+        lines.push(fence)
+        break
+      }
+    }
+  }
+  return `${lines.join('\n').replace(/^\n+/u, '')}\n`
+}

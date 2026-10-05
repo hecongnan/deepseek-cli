@@ -1,0 +1,66 @@
+# dsh-tui — the terminal agent plane, over dsh-base.
+#
+# This layer inserts only rows that mount this plugin's own entry points, and it
+# disables no base row. The agent plane itself — the tools, prompt sections,
+# skills, commands, and planning rows a session runs on — belongs to the bundle
+# that ships each of those plugins, and the profile's own bundle layers compose
+# it. A row mounted from here would register what the profile already
+# registered, which is the "already registered" wall this file used to produce
+# once the profile's own layer supplied the same plugins.
+- insert:
+    # The two rows below sit ahead of the surface on purpose: a row applies as
+    # soon as its own dependencies are up, the surface builds as soon as the
+    # harness's agent services are up, and the roster arrives only after settings
+    # — later than both.
+
+    # The roster of agent compositions, and the mode a session starts in when
+    # nobody names one. PTC leads because a flagless run should reach every tool
+    # through one program rather than one shell call at a time.
+    - id: agent-presets
+      name: '@sagmans/dsh-tui/host/roster'
+
+    # Creator mode inspects and re-composes the running harness, which needs the
+    # host half of the dynamic-plugin runner. Only the Web bundle ships this
+    # row, so a terminal profile has to mount it to offer that mode at all.
+    - id: cordis-host-runner
+      name: '@sagmans/dsh-tui/host/runner'
+
+    # Addons register before the surface takes its keyboard; each owner cleans up its own rows.
+    - id: tui-keymaps
+      name: '@sagmans/dsh-tui/keymaps'
+
+    - id: tui-startup
+      name: '@sagmans/dsh-tui/startup'
+
+    - id: tui
+      name: '@sagmans/dsh-tui'
+      inject: [tuiStartup]
+      config:
+        sessionId: !!js ctx.tuiStartup.sessionId
+        resume: !!js ctx.tuiStartup.resume
+        resumePicker: !!js ctx.tuiStartup.resumePicker
+        model: !!js ctx.tuiStartup.model
+        provider: !!js ctx.tuiStartup.provider
+        preset: !!js ctx.tuiStartup.preset
+        color: !!js ctx.tuiStartup.color
+        bell: !!js ctx.tuiStartup.bell
+
+    # Advisory todo discipline for every agent this profile runs. The tool and
+    # its list already exist per session; this row only notices when a plan has
+    # aged and rides the next tool result with a reminder. It is host-plane on
+    # purpose: it registers no tool, provides no service, and never gates a
+    # call, so it needs no preset and no realm. `staleSteps` and the rest are
+    # documented in the README and overridable from a profile patch.
+    - id: tui-todo-guard
+      name: '@sagmans/dsh-tui/todo-guard'
+      config:
+        staleSteps: 6
+        missingListSteps: 12
+        maxRemindersPerTurn: 3
+        previewItems: 5
+
+    # A preset's subagent tool samples its delegation model from this host-owned
+    # settings row. It is host machinery rather than agent plane, which is why
+    # the Web bundle inserts it too instead of leaving it to a preset.
+    - id: subagent-model-selection-settings
+      name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
